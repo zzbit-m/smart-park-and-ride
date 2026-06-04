@@ -1,26 +1,14 @@
-import os
-import redis.asyncio as aioredis
+from database import get_redis
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+HOLD_TTL_SECONDS = 900  # 15 minutes
 
-# Shared Redis client (created once at startup)
-redis_client: aioredis.Redis = None
-
-async def init_redis():
-    global redis_client
-    redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
-
-async def close_redis():
-    if redis_client:
-        await redis_client.aclose()
 
 def get_slot_key(slot_id: int) -> str:
     return f"slot:status:{slot_id}"
 
-# ----------------------------------------------------------------
-# Lua script — atomic hold operation (prevents double-booking)
-# Returns 1 on success, 0 if slot is already taken
-# ----------------------------------------------------------------
+
+# Atomic hold: SET only if missing or "available" (prevents double-booking).
+# Returns 1 on success, 0 if slot is already held or occupied.
 HOLD_SCRIPT = """
 local current = redis.call('GET', KEYS[1])
 if current == false or current == 'available' then
@@ -31,38 +19,45 @@ else
 end
 """
 
-async def hold_slot(slot_id: int, booking_id: str, ttl_seconds: int = 900) -> bool:
+
+async def hold_slot(
+    slot_id: int,
+    booking_id: str,
+    ttl_seconds: int = HOLD_TTL_SECONDS,
+) -> bool:
     """
-    Atomically set a slot to held state.
-    Returns True if successful, False if already taken.
+    Atomically hold a slot in Redis for up to ttl_seconds (default 15 min).
+    Value stored: held:{booking_id}
+    Returns True if the lock was acquired, False if already taken.
     """
+    redis = get_redis()
     key = get_slot_key(slot_id)
-    result = await redis_client.eval(HOLD_SCRIPT, 1, key, booking_id, ttl_seconds)
+    result = await redis.eval(HOLD_SCRIPT, 1, key, booking_id, str(ttl_seconds))
     return result == 1
 
-async def confirm_slot(slot_id: int, booking_id: str) -> None:
-    """Mark slot as occupied after user scans in at the gate."""
-    key = get_slot_key(slot_id)
-    await redis_client.set(key, f"occupied:{booking_id}")  # no TTL
-
-async def release_slot(slot_id: int) -> None:
-    """Return slot to available (scan out, or hold expired)."""
-    key = get_slot_key(slot_id)
-    await redis_client.set(key, "available")
 
 async def get_slot_status(slot_id: int) -> str:
-    """Get raw Redis value for a slot. Returns 'available' if key missing."""
-    key = get_slot_key(slot_id)
-    value = await redis_client.get(key)
+    """Return raw Redis value for one slot ('available' if unset)."""
+    redis = get_redis()
+    value = await redis.get(get_slot_key(slot_id))
     return value if value else "available"
 
+
 async def get_all_slot_statuses(slot_ids: list[int]) -> dict[int, str]:
-    """Batch fetch statuses for multiple slots."""
+    """Batch-fetch live status for all given slot IDs."""
     if not slot_ids:
         return {}
+
+    redis = get_redis()
     keys = [get_slot_key(sid) for sid in slot_ids]
-    values = await redis_client.mget(*keys)
+    values = await redis.mget(*keys)
     return {
         sid: (val if val else "available")
         for sid, val in zip(slot_ids, values)
     }
+
+
+async def release_slot(slot_id: int) -> None:
+    """Return a slot to available (e.g. cancel hold or scan out)."""
+    redis = get_redis()
+    await redis.set(get_slot_key(slot_id), "available")

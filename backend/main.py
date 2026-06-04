@@ -4,6 +4,7 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import check_postgres, check_redis, close_connections, init_connections
+from routers import slots
 
 
 @asynccontextmanager
@@ -26,6 +27,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(slots.router, prefix="/api")
 
 
 @app.get("/health")

@@ -58,7 +58,7 @@ async function loadSlots() {
     return;
   }
   try {
-    const res = await fetch(`${API}/slots/`);
+    const res = await fetch(`${API}/api/slots/`);
     if (!res.ok) throw new Error();
     state.slots = await res.json();
     renderParkingLot();
@@ -173,7 +173,7 @@ async function holdSlot(slotId, slotCode) {
   }
 
   try {
-    const res = await fetch(`${API}/slots/${slotId}/hold`, { method: 'POST' });
+    const res = await fetch(`${API}/api/slots/${slotId}/hold`, { method: 'POST' });
     if (res.status === 409) { showToast('❌ ช่องนี้ถูกจองแล้ว'); loadSlots(); return; }
     if (!res.ok) throw new Error();
     const data = await res.json();
@@ -255,7 +255,7 @@ function startCountdown(expiresAt) {
 async function cancelHold() {
   if (!state.activeBooking) return;
   if (!USE_DEMO) {
-    try { await fetch(`${API}/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' }); } catch {}
+    try { await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' }); } catch {}
   }
   clearInterval(state.countdownTimer);
   state.activeBooking = null;
@@ -276,7 +276,7 @@ function renderParkedScreen() {
 // ── CHECK OUT ──
 async function checkOut() {
   if (!USE_DEMO && state.activeBooking) {
-    try { await fetch(`${API}/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' }); } catch {}
+    try { await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' }); } catch {}
   }
   clearInterval(state.countdownTimer);
   document.getElementById('checkout-result').textContent = '✓ คืนช่องจอดเรียบร้อย';
