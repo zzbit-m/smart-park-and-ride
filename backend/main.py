@@ -4,7 +4,7 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import check_postgres, check_redis, close_connections, init_connections
-from routers import slots
+from routers import slots, trams
 
 
 @asynccontextmanager
@@ -29,6 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(slots.router, prefix="/api")
+app.include_router(trams.router, prefix="/api")
 
 
 @app.get("/health")

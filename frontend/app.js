@@ -20,6 +20,8 @@ function showScreen(id) {
   window.scrollTo(0, 0);
   if (id === 'screen-tram') renderTramSchedule();
   if (id === 'screen-parked') renderParkedScreen();
+  // Sync checkout button state every time the scan-out screen is opened
+  if (id === 'screen-scanout') syncCheckoutBtn();
 }
 
 // ── TOAST ──
@@ -484,10 +486,34 @@ function renderParkedScreen() {
   document.getElementById('scanout-slot-display').textContent = slot;
   const mins = Math.floor(Math.random() * 10) + 3;
   document.getElementById('tram-next-time').textContent = `${mins} นาที`;
+  syncCheckoutBtn();
+}
+
+// ── SYNC CHECKOUT BUTTON (enable only when a valid booking + qr_token exists) ──
+function syncCheckoutBtn() {
+  const btn = document.getElementById('confirm-checkout-btn');
+  if (!btn) return;
+
+  const booking = getStoredActiveBooking();
+  const hasBooking = !!booking && !!booking.qr_token;
+
+  btn.disabled = !hasBooking;
+  btn.classList.toggle('btn-disabled', !hasBooking);
+  btn.title = hasBooking
+    ? ''
+    : 'ไม่มีการจองที่ใช้งานอยู่';
 }
 
 // ── CHECK OUT ──
 async function checkOut() {
+  // ── Guard: reject immediately if no active booking or missing token ──
+  const booking = getStoredActiveBooking();
+  if (!booking || !booking.qr_token) {
+    showToast('⚠️ ไม่มีการจองที่ใช้งาน');
+    syncCheckoutBtn(); // keep button in correct disabled state
+    return;
+  }
+
   if (state.activeBooking) {
     try {
       await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' });
@@ -502,6 +528,7 @@ async function checkOut() {
   state.activeBooking = null;
   state.parkedSlot = null;
   showToast('✓ ออกจากลานจอดเรียบร้อย');
+  syncCheckoutBtn(); // disable the button now that booking is cleared
   setTimeout(async () => {
     document.getElementById('checkout-result').textContent = '';
     showScreen('screen-home');
@@ -509,34 +536,30 @@ async function checkOut() {
   }, 1800);
 }
 
-// ── TRAM SCHEDULE ──
-function renderTramSchedule() {
-  const now = new Date();
-  const schedule = [
-    { route: 'สาย 1 → สถานีกลาง', zone: 'ZONE-A', offsetMin: 3 },
-    { route: 'สาย 2 → ท่ารถ',     zone: 'ZONE-B', offsetMin: 8 },
-    { route: 'สาย 1 → สถานีกลาง', zone: 'ZONE-A', offsetMin: 18 },
-    { route: 'สาย 3 → อาคาร C',   zone: 'ZONE-C', offsetMin: 25 },
-    { route: 'สาย 2 → ท่ารถ',     zone: 'ZONE-B', offsetMin: 33 },
-  ];
-  const list = document.getElementById('tram-list');
-  list.innerHTML = '';
-  schedule.forEach(item => {
-    const dep = new Date(now.getTime() + item.offsetMin * 60000);
-    const hh  = String(dep.getHours()).padStart(2,'0');
-    const mm  = String(dep.getMinutes()).padStart(2,'0');
-    const cls = item.offsetMin <= 5 ? 'soon' : item.offsetMin >= 30 ? 'late' : '';
-    list.innerHTML += `
-      <div class="tram-card ${cls}">
-        <div class="tram-card-left">
-          <div class="tram-card-route">${item.route}</div>
-          <div class="tram-card-zone">${item.zone} · อีก ${item.offsetMin} นาที</div>
-        </div>
-        <div class="tram-card-time">${hh}:${mm}</div>
-      </div>
-    `;
-  });
+// ── TRAM SCHEDULE (Phase 8 — fetches mock from /api/trams/live) ──
+async function renderTramSchedule() {
+  const pillText = document.getElementById('tram-live-pill-text');
+
+  try {
+    const res = await fetch(`${API}/api/trams/live`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    const trams = data.trams ?? [];
+
+    if (trams.length > 0 && pillText) {
+      // Update the live pill with the first (soonest) tram
+      const first = trams[0];
+      pillText.textContent =
+        `รถรางคันต่อไป: ${first.line} (${first.next_arrival}) — ${first.status}`;
+    }
+
+  } catch (err) {
+    // Fail silently — static pill text is already in the HTML
+    console.warn('[Tram] Could not fetch live data, showing static placeholder.', err);
+  }
 }
+
 
 // ── INIT ──
 initTicketModal();

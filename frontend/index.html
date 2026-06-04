@@ -112,7 +112,7 @@
         ช่องจอด: <strong id="scanout-slot-display">A-07</strong>
       </div>
 
-      <button class="btn-primary btn-large" onclick="checkOut()">
+      <button id="confirm-checkout-btn" class="btn-primary btn-large" onclick="checkOut()">
         ✓ ยืนยันออกจากลานจอด
       </button>
 
@@ -120,15 +120,37 @@
     </div>
   </div>
 
-  <!-- ── TRAM SCREEN ── -->
+  <!-- ── TRAM SCREEN (Phase 8 — Coming Soon) ── -->
   <div id="screen-tram" class="screen">
     <div class="back-btn" onclick="showScreen('screen-home')">← กลับ</div>
-    <div class="tram-container">
-      <h2>🚃 ตารางรถราง</h2>
-      <p class="tram-sub">อัปเดตแบบเรียลไทม์</p>
-      <div class="tram-list" id="tram-list">
-        <!-- Injected by JS -->
+
+    <div class="tram-cs-container">
+
+      <!-- Animated tram icon -->
+      <div class="tram-cs-icon-wrap">
+        <div class="tram-cs-orbit"></div>
+        <span class="tram-cs-emoji">🚃</span>
       </div>
+
+      <!-- Live next tram pill (populated by JS from /api/trams/live) -->
+      <div class="tram-cs-live-pill" id="tram-live-pill">
+        <span class="tram-cs-live-dot"></span>
+        <span id="tram-live-pill-text">รถรางคันต่อไป: สายสีน้ำเงิน (3 นาที)</span>
+      </div>
+
+      <!-- Coming Soon headline -->
+      <h2 class="tram-cs-title">ระบบรถรางรับส่ง</h2>
+      <p class="tram-cs-badge">Coming Soon</p>
+      <p class="tram-cs-sub">อยู่ระหว่างการพัฒนา</p>
+      <p class="tram-cs-hw">รอการเชื่อมต่อข้อมูลฮาร์ดแวร์รถราง</p>
+
+      <!-- Phase roadmap chips -->
+      <div class="tram-cs-chips">
+        <span class="tram-chip tram-chip--done">✓ Phase 7 — Scan Out</span>
+        <span class="tram-chip tram-chip--active">◉ Phase 8 — Tram Mock</span>
+        <span class="tram-chip tram-chip--next">○ Phase 9 — Hardware</span>
+      </div>
+
     </div>
   </div>
 

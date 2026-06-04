@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Panel — Gate Scanner | Smart Park &amp; Ride</title>
+  <meta name="description" content="Admin gate scanner panel for Smart Park &amp; Ride — scan QR tokens to open the parking barrier." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="admin-body">
+
+  <div class="admin-wrapper">
+
+    <!-- ── HEADER ── -->
+    <header class="admin-header">
+      <div class="admin-header-inner">
+        <div class="admin-logo-row">
+          <span class="admin-logo">P&amp;R</span>
+          <span class="admin-role-badge">GATE STAFF</span>
+        </div>
+        <h1 class="admin-title">Admin Panel</h1>
+        <p class="admin-subtitle">Gate Scanner — เปิดไม้กั้น</p>
+      </div>
+      <!-- Animated accent line -->
+      <div class="admin-header-glow"></div>
+    </header>
+
+    <!-- ── MAIN CONTENT ── -->
+    <main class="admin-main">
+
+      <!-- Status indicator -->
+      <div class="admin-status-bar">
+        <span class="status-dot status-online"></span>
+        <span class="status-text">ระบบพร้อมใช้งาน</span>
+        <span class="status-endpoint">POST /api/slots/scan &amp; /scan-out</span>
+      </div>
+
+      <!-- Scanner card -->
+      <div class="admin-card scanner-card">
+        <div class="scanner-icon-wrap">
+          <div class="scanner-icon">
+            <div class="scanner-ring scanner-ring-1"></div>
+            <div class="scanner-ring scanner-ring-2"></div>
+            <span class="scanner-emoji">🔍</span>
+          </div>
+        </div>
+
+        <h2 class="scanner-card-title">สแกน QR Token</h2>
+        <p class="scanner-card-sub">ใส่ Token จาก QR Code ของผู้ใช้<br>เพื่อเปิดไม้กั้นเข้า หรือ บันทึกรถออก</p>
+
+        <div class="scan-form">
+          <div class="input-group">
+            <label for="qr-input" class="input-label">QR TOKEN</label>
+            <div class="input-wrapper">
+              <span class="input-icon">⬛</span>
+              <input
+                id="qr-input"
+                type="text"
+                class="scan-input"
+                placeholder="Scan or Paste QR Token here"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button class="input-clear-btn" id="clear-btn" title="Clear" aria-label="Clear input">✕</button>
+            </div>
+          </div>
+
+          <!-- Dual action button row -->
+          <div class="scan-btn-row">
+            <button id="scan-btn" class="btn-scan btn-scan-in">
+              <span class="btn-scan-icon">🚧</span>
+              <span class="btn-scan-text">เปิดไม้กั้น (Scan In)</span>
+            </button>
+            <button id="scan-out-btn" class="btn-scan btn-scan-out">
+              <span class="btn-scan-icon">🚗</span>
+              <span class="btn-scan-text">สแกนรถออก (Scan Out)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Result message container -->
+        <div id="scan-result" class="scan-result" role="alert" aria-live="polite"></div>
+      </div>
+
+
+      <!-- ── Admin Manual Override ── -->
+      <div class="admin-card override-card">
+        <div class="override-header">
+          <span class="override-icon">⚠️</span>
+          <div>
+            <h2 class="override-title">Admin Manual Override</h2>
+            <p class="override-sub">บังคับปลดล็อกช่องจอด — ใช้เมื่อผู้ใช้ลืมสแกนออก</p>
+          </div>
+        </div>
+
+        <div class="override-form">
+          <div class="input-group">
+            <label for="manual-slot-input" class="input-label">SLOT CODE</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🅿</span>
+              <input
+                id="manual-slot-input"
+                type="text"
+                class="scan-input override-input"
+                placeholder="กรอกรหัสช่องจอด เช่น A01"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+          </div>
+          <button id="manual-release-btn" class="btn-manual-release">
+            <span class="btn-manual-icon">🔓</span>
+            <span class="btn-manual-text">บังคับเคลียร์ช่องจอด</span>
+          </button>
+        </div>
+
+        <div id="manual-result" class="scan-result" role="alert" aria-live="polite"></div>
+      </div>
+
+
+      <!-- Recent scans log -->
+      <div class="admin-card log-card">
+        <div class="log-header">
+          <span class="log-title">Recent Scans</span>
+          <button id="clear-log-btn" class="log-clear-btn">ล้าง</button>
+        </div>
+        <div id="scan-log" class="scan-log">
+          <div class="log-empty">ยังไม่มีการสแกน</div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ── FOOTER ── -->
+    <footer class="admin-footer">
+      <span class="footer-text">Smart Park &amp; Ride — Staff Interface</span>
+    </footer>
+
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

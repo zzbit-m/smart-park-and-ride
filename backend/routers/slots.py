@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -51,11 +52,55 @@ class ScanResponse(BaseModel):
     slot_id: int
 
 
+class ScanOutResponse(BaseModel):
+    status: str
+    message: str
+    slot_id: int
+    slot_code: str
+
+
+class ManualReleaseRequest(BaseModel):
+    slot_code: str
+
+
+class ManualReleaseResponse(BaseModel):
+    status: str
+    message: str
+    slot_code: str
+    booking_id: str
+
+
 class SeedResponse(BaseModel):
     message: str
     zones_created: int
     slots_created: int
     slot_codes: list[str]
+
+
+# ── Analytics models ──────────────────────────────────────────────────────────
+
+class HourlyCount(BaseModel):
+    hour: int
+    count: int
+
+
+class DailyCount(BaseModel):
+    day_of_week: int    # 0 = Sunday … 6 = Saturday (PostgreSQL EXTRACT DOW)
+    day_name: str
+    count: int
+
+
+class SummaryStats(BaseModel):
+    total_completed: int
+    currently_active: int   # status IN ('held', 'confirmed')
+    total_cancelled: int    # status IN ('expired', 'no_show')
+
+
+class AnalyticsResponse(BaseModel):
+    peak_hours: list[HourlyCount]
+    average_duration_minutes: float
+    daily_traffic: list[DailyCount]
+    summary_stats: SummaryStats
 
 
 SEED_SLOTS = (
@@ -86,6 +131,99 @@ async def _get_or_create_zone(
     return result.fetchone().id, True
 
 
+# Day-of-week lookup (PostgreSQL DOW: 0=Sunday)
+_DOW_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+
+@router.get("/analytics", response_model=AnalyticsResponse)
+async def get_analytics(db: AsyncSession = Depends(get_db)):
+    """
+    Return parking usage analytics for operational planning:
+    - peak_hours: check-ins grouped by local hour, sorted by count desc
+    - average_duration_minutes: mean session length for completed bookings
+    - daily_traffic: check-ins grouped by day of week (local time)
+    - summary_stats: completed / active / cancelled booking counts
+    """
+
+    # Run all four queries concurrently
+    peak_q, duration_q, daily_q, summary_q = await asyncio.gather(
+        db.execute(text("""
+            SELECT
+                EXTRACT(HOUR FROM checked_in_at AT TIME ZONE 'Asia/Bangkok')::int AS hour,
+                COUNT(*) AS count
+            FROM bookings
+            WHERE checked_in_at IS NOT NULL
+            GROUP BY 1
+            ORDER BY count DESC
+        """)),
+        db.execute(text("""
+            SELECT
+                COALESCE(
+                    AVG(
+                        EXTRACT(EPOCH FROM (checked_out_at - checked_in_at)) / 60.0
+                    ),
+                    0
+                ) AS avg_minutes
+            FROM bookings
+            WHERE status = 'completed'
+              AND checked_in_at  IS NOT NULL
+              AND checked_out_at IS NOT NULL
+              AND checked_out_at > checked_in_at
+        """)),
+        db.execute(text("""
+            SELECT
+                EXTRACT(DOW FROM checked_in_at AT TIME ZONE 'Asia/Bangkok')::int AS dow,
+                COUNT(*) AS count
+            FROM bookings
+            WHERE checked_in_at IS NOT NULL
+            GROUP BY 1
+            ORDER BY dow
+        """)),
+        db.execute(text("""
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'completed')                     AS total_completed,
+                COUNT(*) FILTER (WHERE status IN ('held', 'confirmed'))           AS currently_active,
+                COUNT(*) FILTER (WHERE status IN ('expired', 'no_show'))          AS total_cancelled
+            FROM bookings
+        """)),
+    )
+
+    # ── peak_hours ──
+    peak_hours = [
+        HourlyCount(hour=row.hour, count=row.count)
+        for row in peak_q.fetchall()
+    ]
+
+    # ── average_duration_minutes ──
+    dur_row = duration_q.fetchone()
+    avg_minutes = round(float(dur_row.avg_minutes), 2) if dur_row else 0.0
+
+    # ── daily_traffic ──
+    daily_traffic = [
+        DailyCount(
+            day_of_week=row.dow,
+            day_name=_DOW_NAMES[row.dow],
+            count=row.count,
+        )
+        for row in daily_q.fetchall()
+    ]
+
+    # ── summary_stats ──
+    s = summary_q.fetchone()
+    summary = SummaryStats(
+        total_completed=s.total_completed if s else 0,
+        currently_active=s.currently_active if s else 0,
+        total_cancelled=s.total_cancelled if s else 0,
+    )
+
+    return AnalyticsResponse(
+        peak_hours=peak_hours,
+        average_duration_minutes=avg_minutes,
+        daily_traffic=daily_traffic,
+        summary_stats=summary,
+    )
+
+
 @router.post("/seed", response_model=SeedResponse)
 async def seed_slots(db: AsyncSession = Depends(get_db)):
     """
@@ -100,6 +238,7 @@ async def seed_slots(db: AsyncSession = Depends(get_db)):
         """),
         {"id": PLACEHOLDER_USER_ID},
     )
+
 
     zones_created = 0
     slots_created = 0
@@ -211,6 +350,163 @@ async def scan_in(request: ScanRequest, db: AsyncSession = Depends(get_db)):
         status="success",
         message="Gate opened",
         slot_id=slot_id,
+    )
+
+
+@router.post("/scan-out", response_model=ScanOutResponse)
+async def scan_out(request: ScanRequest, db: AsyncSession = Depends(get_db)):
+    """Gate exit: validate QR token, mark booking completed, free the slot."""
+    qr_token = request.qr_token.strip()
+    if not qr_token:
+        raise HTTPException(status_code=400, detail="QR token is required")
+
+    # Look up the booking by qr_token — accept both confirmed (scanned-in) and held states
+    result = await db.execute(
+        text("""
+            SELECT b.id, b.slot_id, b.status, ps.slot_code
+            FROM bookings b
+            JOIN parking_slots ps ON ps.id = b.slot_id
+            WHERE b.qr_token = :qr_token
+              AND b.status IN ('confirmed', 'held')
+            LIMIT 1
+        """),
+        {"qr_token": qr_token},
+    )
+    row = result.fetchone()
+
+    if not row:
+        # Check whether it exists at all (already completed / expired / no_show)
+        exists = await db.execute(
+            text("SELECT status FROM bookings WHERE qr_token = :qr_token LIMIT 1"),
+            {"qr_token": qr_token},
+        )
+        existing = exists.fetchone()
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Booking already {existing.status} — cannot scan out again",
+            )
+        raise HTTPException(status_code=404, detail="QR token not found or already expired")
+
+    booking_id = row.id
+    slot_id    = row.slot_id
+    slot_code  = row.slot_code
+
+    # Release Redis live state → available (no TTL)
+    await release_slot(slot_id)
+
+    # Clean up any leftover QR token lookup key (defensive)
+    await delete_qr_token_lookup(qr_token)
+
+    # Mark booking completed + record checkout time
+    await db.execute(
+        text("""
+            UPDATE bookings
+            SET status = 'completed', checked_out_at = now()
+            WHERE id = :bid
+        """),
+        {"bid": booking_id},
+    )
+
+    # Sync parking_slots persistent status
+    await db.execute(
+        text("""
+            UPDATE parking_slots
+            SET last_known_status = 'available', updated_at = now()
+            WHERE id = :sid
+        """),
+        {"sid": slot_id},
+    )
+
+    await db.commit()
+
+    return ScanOutResponse(
+        status="success",
+        message=f"Slot {slot_code} is now available",
+        slot_id=slot_id,
+        slot_code=slot_code,
+    )
+
+
+
+@router.post("/manual-release", response_model=ManualReleaseResponse)
+async def manual_release(request: ManualReleaseRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Admin override: force-release a slot by slot_code regardless of QR token.
+    Used when a driver leaves without scanning out (forgotten checkout).
+    Marks the booking as completed and frees the slot in both Redis and PostgreSQL.
+    """
+    slot_code = request.slot_code.strip().upper()
+    if not slot_code:
+        raise HTTPException(status_code=400, detail="slot_code is required")
+
+    # Resolve slot_code → slot_id and find any active booking in one query
+    result = await db.execute(
+        text("""
+            SELECT
+                ps.id        AS slot_id,
+                ps.slot_code AS slot_code,
+                b.id         AS booking_id,
+                b.status     AS booking_status,
+                b.qr_token   AS qr_token
+            FROM parking_slots ps
+            LEFT JOIN bookings b
+                ON b.slot_id = ps.id
+               AND b.status IN ('confirmed', 'held')
+            WHERE ps.slot_code = :slot_code
+            ORDER BY b.held_at DESC
+            LIMIT 1
+        """),
+        {"slot_code": slot_code},
+    )
+    row = result.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Slot '{slot_code}' not found")
+
+    slot_id    = row.slot_id
+    booking_id = row.booking_id
+
+    if not booking_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Slot '{slot_code}' has no active booking — it may already be available",
+        )
+
+    # ── Release Redis (set back to available, remove TTL) ──
+    await release_slot(slot_id)
+
+    # ── Clean up QR token reverse-lookup key if present ──
+    if row.qr_token:
+        await delete_qr_token_lookup(row.qr_token)
+
+    # ── Mark booking completed ──
+    await db.execute(
+        text("""
+            UPDATE bookings
+            SET status = 'completed', checked_out_at = now()
+            WHERE id = :bid
+        """),
+        {"bid": booking_id},
+    )
+
+    # ── Sync persistent slot status ──
+    await db.execute(
+        text("""
+            UPDATE parking_slots
+            SET last_known_status = 'available', updated_at = now()
+            WHERE id = :sid
+        """),
+        {"sid": slot_id},
+    )
+
+    await db.commit()
+
+    return ManualReleaseResponse(
+        status="success",
+        message=f"Slot {slot_code} manually released — booking marked completed",
+        slot_code=slot_code,
+        booking_id=str(booking_id),
     )
 
 
