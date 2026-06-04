@@ -9,11 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from redis_client import (
     HOLD_TTL_SECONDS,
+    delete_qr_token_lookup,
+    delete_slot_hold,
     get_all_slot_statuses,
     get_redis,
+    get_slot_id_by_qr_token,
     get_slot_key,
     hold_slot,
     release_slot,
+    set_qr_token_lookup,
 )
 
 router = APIRouter(prefix="/slots", tags=["slots"])
@@ -35,6 +39,16 @@ class HoldResponse(BaseModel):
     slot_code: str
     expires_at: str
     qr_token: str
+
+
+class ScanRequest(BaseModel):
+    qr_token: str
+
+
+class ScanResponse(BaseModel):
+    status: str
+    message: str
+    slot_id: int
 
 
 class SeedResponse(BaseModel):
@@ -131,7 +145,7 @@ async def list_slots(db: AsyncSession = Depends(get_db)):
     """List all parking slots with live status merged from PostgreSQL and Redis."""
     result = await db.execute(
         text(
-            "SELECT id, slot_code, zone_id FROM parking_slots "
+            "SELECT id, slot_code, zone_id, last_known_status FROM parking_slots "
             "ORDER BY zone_id, slot_code"
         )
     )
@@ -145,10 +159,59 @@ async def list_slots(db: AsyncSession = Depends(get_db)):
             id=row.id,
             slot_code=row.slot_code,
             zone_id=row.zone_id,
-            live_status=statuses.get(row.id, "available"),
+            live_status=_merge_live_status(
+                statuses.get(row.id, "available"),
+                row.last_known_status,
+            ),
         )
         for row in rows
     ]
+
+
+def _merge_live_status(redis_status: str, pg_status: str) -> str:
+    """Prefer Redis live state; fall back to PostgreSQL after scan-in clears Redis keys."""
+    if redis_status != "available":
+        return redis_status
+    return pg_status
+
+
+@router.post("/scan", response_model=ScanResponse)
+async def scan_in(request: ScanRequest, db: AsyncSession = Depends(get_db)):
+    """Gate entry: validate QR token via Redis, mark slot occupied in PostgreSQL."""
+    qr_token = request.qr_token.strip()
+    if not qr_token:
+        raise HTTPException(status_code=400, detail="Invalid or expired QR code")
+
+    slot_id = await get_slot_id_by_qr_token(qr_token)
+    if slot_id is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired QR code")
+
+    await delete_qr_token_lookup(qr_token)
+    await delete_slot_hold(slot_id)
+
+    await db.execute(
+        text("""
+            UPDATE parking_slots
+            SET last_known_status = 'occupied', updated_at = now()
+            WHERE id = :sid
+        """),
+        {"sid": slot_id},
+    )
+    await db.execute(
+        text("""
+            UPDATE bookings
+            SET status = 'confirmed', checked_in_at = now()
+            WHERE qr_token = :qr_token AND status = 'held'
+        """),
+        {"qr_token": qr_token},
+    )
+    await db.commit()
+
+    return ScanResponse(
+        status="success",
+        message="Gate opened",
+        slot_id=slot_id,
+    )
 
 
 @router.post("/{slot_id}/hold", response_model=HoldResponse)
@@ -196,6 +259,8 @@ async def hold_slot_endpoint(slot_id: int, db: AsyncSession = Depends(get_db)):
         await release_slot(slot_id)
         raise
 
+    await set_qr_token_lookup(qr_token, slot_id, ttl_seconds=HOLD_TTL_SECONDS)
+
     return HoldResponse(
         booking_id=booking_id,
         slot_id=slot_id,
@@ -208,7 +273,19 @@ async def hold_slot_endpoint(slot_id: int, db: AsyncSession = Depends(get_db)):
 @router.delete("/{slot_id}/hold")
 async def release_hold(slot_id: int, db: AsyncSession = Depends(get_db)):
     """Release a held slot (used by frontend cancel / scan-out)."""
+    token_row = await db.execute(
+        text("""
+            SELECT qr_token FROM bookings
+            WHERE slot_id = :sid AND status = 'held'
+        """),
+        {"sid": slot_id},
+    )
+    token_result = token_row.fetchone()
+
     await release_slot(slot_id)
+
+    if token_result:
+        await delete_qr_token_lookup(token_result.qr_token)
 
     await db.execute(
         text("""

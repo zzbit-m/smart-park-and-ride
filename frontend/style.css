@@ -647,3 +647,185 @@ header::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* ── BOOKING TICKET MODAL ── */
+.ticket-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.ticket-modal[hidden] {
+  display: none;
+}
+
+.ticket-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 10, 22, 0.82);
+  backdrop-filter: blur(4px);
+}
+
+.ticket-modal-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 340px;
+  background: linear-gradient(165deg, var(--surface2) 0%, var(--surface) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px 24px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(61, 139, 255, 0.08);
+  text-align: center;
+  animation: ticketPop 0.28s ease;
+}
+
+@keyframes ticketPop {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.ticket-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.ticket-modal-sub {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+}
+
+.ticket-qr-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.ticket-qr-image {
+  width: 150px;
+  height: 150px;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 8px;
+  box-shadow: 0 0 32px rgba(61, 139, 255, 0.2);
+}
+
+.ticket-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.ticket-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.ticket-detail-row dt {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
+}
+
+.ticket-detail-row dd {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.ticket-mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  word-break: break-all;
+  text-align: right;
+  max-width: 58%;
+}
+
+.ticket-countdown {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--yellow);
+  letter-spacing: 2px;
+}
+
+.ticket-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#cancel-btn {
+  width: 100%;
+  padding: 14px 20px;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-th);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 20px rgba(255, 77, 109, 0.35);
+}
+
+#cancel-btn:hover {
+  background: #ff6b85;
+  box-shadow: 0 6px 28px rgba(255, 77, 109, 0.5);
+  transform: translateY(-1px);
+}
+
+#cancel-btn:active {
+  transform: translateY(0);
+  background: #e63956;
+}
+
+.ticket-modal-close {
+  width: 100%;
+  padding: 14px 20px;
+  background: transparent;
+  color: var(--green);
+  border: 2px solid var(--green);
+  border-radius: var(--radius);
+  font-family: var(--font-th);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 20px rgba(0, 229, 160, 0.12);
+}
+
+.ticket-modal-close:hover {
+  background: rgba(0, 229, 160, 0.12);
+  box-shadow: 0 0 28px rgba(0, 229, 160, 0.25);
+  transform: translateY(-1px);
+}
+
+.ticket-modal-close:active {
+  transform: translateY(0);
+}

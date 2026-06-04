@@ -135,6 +135,46 @@
   <!-- ── TOAST ── -->
   <div class="toast" id="toast"></div>
 
+  <!-- ── BOOKING TICKET MODAL ── -->
+  <div id="ticket-modal" class="ticket-modal" hidden aria-hidden="true">
+    <div class="ticket-modal-overlay" id="ticket-modal-overlay"></div>
+    <div class="ticket-modal-card" role="dialog" aria-labelledby="ticket-modal-title" aria-modal="true">
+      <h2 id="ticket-modal-title" class="ticket-modal-title">ตั๋วจองที่จอด</h2>
+      <p class="ticket-modal-sub">แสดง QR Code ที่ทางเข้า</p>
+
+      <div class="ticket-qr-wrap">
+        <img
+          id="ticket-qr-image"
+          class="ticket-qr-image"
+          src=""
+          alt="Booking QR Code"
+          width="150"
+          height="150"
+        />
+      </div>
+
+      <dl class="ticket-details">
+        <div class="ticket-detail-row">
+          <dt>ช่องจอด</dt>
+          <dd id="ticket-slot-code">—</dd>
+        </div>
+        <div class="ticket-detail-row">
+          <dt>รหัสการจอง</dt>
+          <dd id="ticket-booking-id" class="ticket-mono">—</dd>
+        </div>
+        <div class="ticket-detail-row">
+          <dt>หมดเวลาใน</dt>
+          <dd id="ticket-expiry-countdown" class="ticket-countdown">15:00</dd>
+        </div>
+      </dl>
+
+      <div class="ticket-modal-actions">
+        <button type="button" id="cancel-btn">ยกเลิกการจอง</button>
+        <button type="button" id="ticket-modal-close" class="ticket-modal-close">ปิด</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

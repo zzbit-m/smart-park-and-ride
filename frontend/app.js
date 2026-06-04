@@ -1,12 +1,15 @@
 // ── CONFIG ──
 const API = 'http://localhost:8000';
-const USE_DEMO = window.location.protocol === 'file:';
+const SLOTS_URL = `${API}/api/slots`;
+const QR_API = 'https://api.qrserver.com/v1/create-qr-code/';
+const ACTIVE_BOOKING_KEY = 'activeBooking';
 
 // ── STATE ──
 let state = {
   slots: [],
   activeBooking: null,
   countdownTimer: null,
+  modalCountdownTimer: null,
   parkedSlot: null,
 };
 
@@ -27,95 +30,285 @@ function showToast(msg, duration = 2500) {
   setTimeout(() => el.classList.remove('show'), duration);
 }
 
-// ── DEMO DATA ──
-function generateDemoSlots() {
-  const statuses = [
-    'available','occupied',
-    'available','available',
-    'held',     'occupied',
-    'available','available',
-    'occupied', 'available',
-    'available','held',
-    'available','occupied',
-    'available','available',
-    'held',     'available',
-    'occupied', 'available',
-  ];
-  return statuses.map((s, i) => ({
-    id: i + 1,
-    slot_code: `A-${String(i + 1).padStart(2, '0')}`,
-    zone_id: 1,
-    live_status: s,
-  }));
+// ── LOCAL STORAGE: ONE ACTIVE BOOKING PER DEVICE ──
+function getStoredActiveBooking() {
+  const raw = localStorage.getItem(ACTIVE_BOOKING_KEY);
+  if (!raw) return null;
+
+  try {
+    const booking = JSON.parse(raw);
+    if (!booking.expires_at) {
+      localStorage.removeItem(ACTIVE_BOOKING_KEY);
+      return null;
+    }
+
+    if (new Date(booking.expires_at) <= new Date()) {
+      localStorage.removeItem(ACTIVE_BOOKING_KEY);
+      return null;
+    }
+
+    return booking;
+  } catch {
+    localStorage.removeItem(ACTIVE_BOOKING_KEY);
+    return null;
+  }
+}
+
+function saveStoredActiveBooking({ booking_id, slot_id, slot_code, qr_token, expires_at }) {
+  localStorage.setItem(
+    ACTIVE_BOOKING_KEY,
+    JSON.stringify({ booking_id, slot_id, slot_code, qr_token, expires_at })
+  );
+}
+
+function clearStoredActiveBooking() {
+  localStorage.removeItem(ACTIVE_BOOKING_KEY);
+}
+
+function hasActiveStoredBooking() {
+  return getStoredActiveBooking() !== null;
+}
+
+function isOwnHeldSlot(slotId, slotCode) {
+  const booking = getStoredActiveBooking();
+  if (!booking) return false;
+  return (
+    Number(booking.slot_id) === Number(slotId) ||
+    booking.slot_code === slotCode
+  );
+}
+
+function reopenTicketFromStorage() {
+  const booking = getStoredActiveBooking();
+  if (!booking) return;
+
+  state.activeBooking = {
+    bookingId: booking.booking_id,
+    slotId: booking.slot_id,
+    slotCode: booking.slot_code,
+    expiresAt: new Date(booking.expires_at),
+    qrToken: booking.qr_token,
+  };
+  state.parkedSlot = booking.slot_code;
+
+  showBookingTicketModal({
+    booking_id: booking.booking_id,
+    slot_code: booking.slot_code,
+    qr_token: booking.qr_token,
+    expires_at: booking.expires_at,
+  });
+}
+
+// ── BOOKING TICKET MODAL ──
+function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at }) {
+  const modal = document.getElementById('ticket-modal');
+  const expiresAt = new Date(expires_at);
+
+  document.getElementById('ticket-slot-code').textContent = slot_code;
+  document.getElementById('ticket-booking-id').textContent = booking_id;
+  document.getElementById('ticket-qr-image').src =
+    `${QR_API}?size=150x150&data=${encodeURIComponent(qr_token)}`;
+  document.getElementById('ticket-qr-image').alt = `QR Code for slot ${slot_code}`;
+
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+
+  startModalCountdown(expiresAt);
+}
+
+function hideBookingTicketModal() {
+  const modal = document.getElementById('ticket-modal');
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+
+  if (state.modalCountdownTimer) {
+    clearInterval(state.modalCountdownTimer);
+    state.modalCountdownTimer = null;
+  }
+}
+
+function startModalCountdown(expiresAt) {
+  const el = document.getElementById('ticket-expiry-countdown');
+
+  if (state.modalCountdownTimer) clearInterval(state.modalCountdownTimer);
+
+  function tick() {
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) {
+      el.textContent = '00:00';
+      clearInterval(state.modalCountdownTimer);
+      state.modalCountdownTimer = null;
+      return;
+    }
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    el.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  tick();
+  state.modalCountdownTimer = setInterval(tick, 1000);
+}
+
+async function cancelBookingFromModal() {
+  const raw = localStorage.getItem(ACTIVE_BOOKING_KEY);
+  if (!raw) {
+    alert('ยกเลิกการจองไม่สำเร็จ');
+    return;
+  }
+
+  let booking;
+  try {
+    booking = JSON.parse(raw);
+  } catch {
+    alert('ยกเลิกการจองไม่สำเร็จ');
+    return;
+  }
+
+  const slotId = booking.slot_id;
+  if (!slotId) {
+    alert('ยกเลิกการจองไม่สำเร็จ');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/api/slots/${slotId}/hold`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Cancel failed (${res.status})`);
+
+    clearStoredActiveBooking();
+    hideBookingTicketModal();
+    clearInterval(state.countdownTimer);
+    state.activeBooking = null;
+    state.parkedSlot = null;
+
+    alert('ยกเลิกการจองสำเร็จ');
+    await loadSlots();
+  } catch (err) {
+    console.error(err);
+    alert('ยกเลิกการจองไม่สำเร็จ');
+  }
+}
+
+function initTicketModal() {
+  document.getElementById('ticket-modal-close').addEventListener('click', hideBookingTicketModal);
+  document.getElementById('ticket-modal-overlay').addEventListener('click', hideBookingTicketModal);
+  document.getElementById('cancel-btn').addEventListener('click', cancelBookingFromModal);
+}
+
+// ── PARKING LOT CLICK (event delegation — survives re-renders) ──
+function initParkingLotClicks() {
+  const lot = document.getElementById('parking-lot');
+  lot.addEventListener('click', (event) => {
+    const slotEl = event.target.closest('.lot-slot');
+    if (!slotEl) return;
+
+    const slotId = Number(slotEl.dataset.slotId);
+    const slotCode = slotEl.dataset.slotCode;
+    if (!slotId || !slotCode) return;
+
+    if (slotEl.classList.contains('available')) {
+      holdSlot(slotId, slotCode);
+      return;
+    }
+
+    if (slotEl.classList.contains('held') && isOwnHeldSlot(slotId, slotCode)) {
+      reopenTicketFromStorage();
+    }
+  });
+}
+
+// ── API: FETCH SLOTS ──
+async function fetchSlots() {
+  const res = await fetch(SLOTS_URL);
+  if (!res.ok) {
+    throw new Error(`Failed to load slots (${res.status})`);
+  }
+  return res.json();
+}
+
+function slotSortKey(slotCode) {
+  const match = String(slotCode).match(/^([A-Za-z]+)(\d+)$/);
+  if (!match) return slotCode;
+  return `${match[1]}${String(match[2]).padStart(4, '0')}`;
+}
+
+function sortSlots(slots) {
+  return [...slots].sort((a, b) =>
+    slotSortKey(a.slot_code).localeCompare(slotSortKey(b.slot_code))
+  );
+}
+
+/** Left column A1–A10, right column B1–B10 (matches seeded API data). */
+function partitionSlotsForGrid(slots) {
+  const sorted = sortSlots(slots);
+  const columnA = sorted.filter(s => /^A/i.test(s.slot_code));
+  const columnB = sorted.filter(s => /^B/i.test(s.slot_code));
+
+  if (columnA.length && columnB.length) {
+    return { left: columnA, right: columnB };
+  }
+
+  return {
+    left: sorted.slice(0, 10),
+    right: sorted.slice(10, 20),
+  };
+}
+
+function normalizeStatus(liveStatus) {
+  const raw = liveStatus || 'available';
+  if (raw.startsWith('held')) return 'held';
+  if (raw.startsWith('occupied')) return 'occupied';
+  return 'available';
 }
 
 // ── LOAD SLOTS ──
 async function loadSlots() {
-  if (USE_DEMO) {
-    state.slots = generateDemoSlots();
-    renderParkingLot();
-    updateAvailableCount();
-    return;
-  }
   try {
-    const res = await fetch(`${API}/api/slots/`);
-    if (!res.ok) throw new Error();
-    state.slots = await res.json();
+    state.slots = await fetchSlots();
     renderParkingLot();
     updateAvailableCount();
-  } catch {
-    state.slots = generateDemoSlots();
+  } catch (err) {
+    console.error(err);
+    state.slots = [];
     renderParkingLot();
     updateAvailableCount();
-    showToast('⚠️ ใช้ข้อมูลตัวอย่าง');
+    showToast('⚠️ โหลดข้อมูลช่องจอดไม่สำเร็จ');
   }
 }
 
 // ── UPDATE COUNT ──
 function updateAvailableCount() {
-  const n = state.slots.filter(s => {
-    const st = s.live_status || 'available';
-    return !st.startsWith('held') && !st.startsWith('occupied');
-  }).length;
+  const n = state.slots.filter(s => normalizeStatus(s.live_status) === 'available').length;
   document.getElementById('available-count').textContent = `${n} ว่าง`;
 }
 
 // ── RENDER PARKING LOT (2 cols × 10 rows with center lane) ──
 function renderParkingLot() {
   const lot = document.getElementById('parking-lot');
-  lot.innerHTML = '';
+  lot.replaceChildren();
 
-  // Split into left column (odd index) and right column (even index)
-  // Layout: [slot][slot] ... lane ... [slot][slot]
-  // We'll do 2 side-by-side blocks of 10, separated by a driving lane
+  const { left, right } = partitionSlotsForGrid(state.slots);
 
-  const left  = state.slots.slice(0, 10);   // A-01 to A-10
-  const right = state.slots.slice(10, 20);  // A-11 to A-20
-
-  // Header row: entry arrow
-  lot.innerHTML = `
-    <div class="lot-entry">
-      <span class="entry-arrow">▼ ทางเข้า</span>
-    </div>
-  `;
+  const entryTop = document.createElement('div');
+  entryTop.className = 'lot-entry';
+  entryTop.innerHTML = '<span class="entry-arrow">▼ ทางเข้า</span>';
+  lot.appendChild(entryTop);
 
   const grid = document.createElement('div');
   grid.className = 'lot-grid';
 
-  for (let row = 0; row < 10; row++) {
+  const rowCount = Math.max(left.length, right.length, 10);
+
+  for (let row = 0; row < rowCount; row++) {
     const rowEl = document.createElement('div');
     rowEl.className = 'lot-row';
 
-    // Left slot
     if (left[row]) rowEl.appendChild(makeSlotEl(left[row]));
 
-    // Center lane
     const lane = document.createElement('div');
     lane.className = 'lot-lane';
     lane.innerHTML = row === 4 ? '<span class="lane-arrow">↕</span>' : '';
     rowEl.appendChild(lane);
 
-    // Right slot
     if (right[row]) rowEl.appendChild(makeSlotEl(right[row]));
 
     grid.appendChild(rowEl);
@@ -123,18 +316,31 @@ function renderParkingLot() {
 
   lot.appendChild(grid);
 
-  // Exit arrow
-  lot.innerHTML += `<div class="lot-entry"><span class="entry-arrow">▲ ทางออก</span></div>`;
+  const entryBottom = document.createElement('div');
+  entryBottom.className = 'lot-entry';
+  entryBottom.innerHTML = '<span class="entry-arrow">▲ ทางออก</span>';
+  lot.appendChild(entryBottom);
 }
 
 function makeSlotEl(slot) {
-  const rawStatus = slot.live_status || 'available';
-  const status = rawStatus.startsWith('held')     ? 'held'
-               : rawStatus.startsWith('occupied') ? 'occupied'
-               : 'available';
+  const status = normalizeStatus(slot.live_status);
+  const isOwnHold = status === 'held' && isOwnHeldSlot(slot.id, slot.slot_code);
 
   const el = document.createElement('div');
   el.className = `lot-slot ${status}`;
+  el.dataset.slotId = String(slot.id);
+  el.dataset.slotCode = slot.slot_code;
+
+  if (status === 'available' || isOwnHold) {
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+  }
+
+  if (isOwnHold) {
+    el.style.cursor = 'pointer';
+    el.title = 'แตะเพื่อดูตั๋วจอง / ยกเลิก';
+  }
+
   el.innerHTML = `
     <div class="lot-slot-inner">
       <span class="lot-slot-icon">${status === 'available' ? '🅿' : status === 'held' ? '⏳' : '🚗'}</span>
@@ -142,41 +348,39 @@ function makeSlotEl(slot) {
     </div>
   `;
 
-  if (status === 'available') {
-    el.onclick = () => holdSlot(slot.id, slot.slot_code);
-  }
-
   return el;
 }
 
 // ── HOLD A SLOT ──
 async function holdSlot(slotId, slotCode) {
-  showToast(`กำลังจอง ${slotCode}...`);
-
-  if (USE_DEMO) {
-    state.activeBooking = {
-      bookingId: 'demo-' + Date.now(),
-      slotId,
-      slotCode,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-      qrToken: 'PR-' + Math.random().toString(36).substring(2, 10).toUpperCase(),
-    };
-    state.parkedSlot = slotCode;
-    state.slots = state.slots.map(s =>
-      s.id === slotId ? { ...s, live_status: 'held' } : s
-    );
-    renderHoldScreen();
-    showScreen('screen-hold');
-    renderParkingLot();
-    updateAvailableCount();
+  if (hasActiveStoredBooking()) {
+    alert('คุณมีการจองที่กำลังใช้งานอยู่แล้ว (You already have an active booking)');
     return;
   }
 
+  showToast(`กำลังจอง ${slotCode}...`);
+
   try {
     const res = await fetch(`${API}/api/slots/${slotId}/hold`, { method: 'POST' });
-    if (res.status === 409) { showToast('❌ ช่องนี้ถูกจองแล้ว'); loadSlots(); return; }
-    if (!res.ok) throw new Error();
+
+    if (res.status === 400 || res.status === 409) {
+      showToast('❌ ช่องนี้ถูกจองแล้ว');
+      await loadSlots();
+      return;
+    }
+
+    if (!res.ok) throw new Error(`Hold failed (${res.status})`);
+
     const data = await res.json();
+
+    saveStoredActiveBooking({
+      booking_id: data.booking_id,
+      slot_id: data.slot_id,
+      slot_code: data.slot_code,
+      qr_token: data.qr_token,
+      expires_at: data.expires_at,
+    });
+
     state.activeBooking = {
       bookingId: data.booking_id,
       slotId: data.slot_id,
@@ -184,11 +388,23 @@ async function holdSlot(slotId, slotCode) {
       expiresAt: new Date(data.expires_at),
       qrToken: data.qr_token,
     };
-    state.parkedSlot = state.activeBooking.slotCode;
-    renderHoldScreen();
-    showScreen('screen-hold');
-    loadSlots();
-  } catch { showToast('❌ เกิดข้อผิดพลาด'); }
+    state.parkedSlot = data.slot_code;
+
+    await loadSlots();
+
+    showBookingTicketModal({
+      booking_id: data.booking_id,
+      slot_code: data.slot_code,
+      qr_token: data.qr_token,
+      expires_at: data.expires_at,
+    });
+
+    showToast('✓ จองสำเร็จ');
+  } catch (err) {
+    console.error(err);
+    showToast('❌ เกิดข้อผิดพลาด');
+    await loadSlots();
+  }
 }
 
 // ── RENDER HOLD SCREEN ──
@@ -200,25 +416,17 @@ function renderHoldScreen() {
   startCountdown(b.expiresAt);
 }
 
-// ── QR CODE ──
+// ── QR CODE (hold screen placeholder) ──
 function renderQR(token) {
   const box = document.getElementById('qr-box');
   box.innerHTML = `
-    <div style="width:176px;height:176px;background:#fff;display:flex;flex-direction:column;
-                align-items:center;justify-content:center;gap:8px;padding:12px;">
-      <div style="width:120px;height:120px;
-                  background:repeating-conic-gradient(#000 0% 25%,#fff 0% 50%) 0 0/10px 10px;
-                  border:3px solid #000;border-radius:4px;position:relative;">
-        <div style="position:absolute;inset:30px;background:#fff;display:flex;
-                    align-items:center;justify-content:center;font-size:10px;
-                    font-weight:bold;color:#000;text-align:center;
-                    border:2px solid #000;border-radius:2px;">P&R</div>
-      </div>
-      <div style="font-size:8px;color:#333;font-family:monospace;
-                  word-break:break-all;text-align:center;">
-        ${token.substring(0, 16)}
-      </div>
-    </div>
+    <img
+      src="${QR_API}?size=150x150&data=${encodeURIComponent(token)}"
+      alt="Booking QR Code"
+      width="150"
+      height="150"
+      style="border-radius:4px;"
+    />
   `;
 }
 
@@ -233,6 +441,7 @@ function startCountdown(expiresAt) {
       document.getElementById('countdown').textContent = '00:00';
       document.getElementById('countdown-bar').style.width = '0%';
       showToast('⏰ หมดเวลาจอง');
+      clearStoredActiveBooking();
       loadSlots();
       return;
     }
@@ -254,19 +463,23 @@ function startCountdown(expiresAt) {
 // ── CANCEL HOLD ──
 async function cancelHold() {
   if (!state.activeBooking) return;
-  if (!USE_DEMO) {
-    try { await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' }); } catch {}
+  try {
+    await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' });
+  } catch (err) {
+    console.error(err);
   }
   clearInterval(state.countdownTimer);
+  hideBookingTicketModal();
+  clearStoredActiveBooking();
   state.activeBooking = null;
   showToast('ยกเลิกการจองแล้ว');
   showScreen('screen-home');
-  loadSlots();
+  await loadSlots();
 }
 
 // ── PARKED SCREEN ──
 function renderParkedScreen() {
-  const slot = state.parkedSlot || 'A-01';
+  const slot = state.parkedSlot || '—';
   document.getElementById('parked-slot-display').textContent = slot;
   document.getElementById('scanout-slot-display').textContent = slot;
   const mins = Math.floor(Math.random() * 10) + 3;
@@ -275,18 +488,24 @@ function renderParkedScreen() {
 
 // ── CHECK OUT ──
 async function checkOut() {
-  if (!USE_DEMO && state.activeBooking) {
-    try { await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' }); } catch {}
+  if (state.activeBooking) {
+    try {
+      await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' });
+    } catch (err) {
+      console.error(err);
+    }
   }
   clearInterval(state.countdownTimer);
+  hideBookingTicketModal();
+  clearStoredActiveBooking();
   document.getElementById('checkout-result').textContent = '✓ คืนช่องจอดเรียบร้อย';
   state.activeBooking = null;
   state.parkedSlot = null;
   showToast('✓ ออกจากลานจอดเรียบร้อย');
-  setTimeout(() => {
+  setTimeout(async () => {
     document.getElementById('checkout-result').textContent = '';
     showScreen('screen-home');
-    loadSlots();
+    await loadSlots();
   }, 1800);
 }
 
@@ -320,5 +539,7 @@ function renderTramSchedule() {
 }
 
 // ── INIT ──
+initTicketModal();
+initParkingLotClicks();
 loadSlots();
 setInterval(loadSlots, 30000);

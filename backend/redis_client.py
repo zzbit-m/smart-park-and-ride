@@ -7,6 +7,10 @@ def get_slot_key(slot_id: int) -> str:
     return f"slot:status:{slot_id}"
 
 
+def get_qr_key(qr_token: str) -> str:
+    return f"qr:{qr_token}"
+
+
 # Atomic hold: SET only if missing or "available" (prevents double-booking).
 # Returns 1 on success, 0 if slot is already held or occupied.
 HOLD_SCRIPT = """
@@ -36,6 +40,36 @@ async def hold_slot(
     return result == 1
 
 
+async def set_qr_token_lookup(
+    qr_token: str,
+    slot_id: int,
+    ttl_seconds: int = HOLD_TTL_SECONDS,
+) -> None:
+    """Map qr_token -> slot_id (same 15-minute TTL as the hold)."""
+    redis = get_redis()
+    await redis.set(get_qr_key(qr_token), str(slot_id), ex=ttl_seconds)
+
+
+async def get_slot_id_by_qr_token(qr_token: str) -> int | None:
+    """Return slot_id for an active QR token, or None if missing/expired."""
+    redis = get_redis()
+    value = await redis.get(get_qr_key(qr_token))
+    if value is None:
+        return None
+    return int(value)
+
+
+async def delete_qr_token_lookup(qr_token: str) -> None:
+    redis = get_redis()
+    await redis.delete(get_qr_key(qr_token))
+
+
+async def delete_slot_hold(slot_id: int) -> None:
+    """Remove the slot status key (clears hold / live Redis state for this slot)."""
+    redis = get_redis()
+    await redis.delete(get_slot_key(slot_id))
+
+
 async def get_slot_status(slot_id: int) -> str:
     """Return raw Redis value for one slot ('available' if unset)."""
     redis = get_redis()
@@ -58,6 +92,6 @@ async def get_all_slot_statuses(slot_ids: list[int]) -> dict[int, str]:
 
 
 async def release_slot(slot_id: int) -> None:
-    """Return a slot to available (e.g. cancel hold or scan out)."""
+    """Return a slot to available (e.g. cancel hold)."""
     redis = get_redis()
     await redis.set(get_slot_key(slot_id), "available")
