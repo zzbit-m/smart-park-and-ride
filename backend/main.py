@@ -1,18 +1,16 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from redis_client import init_redis, close_redis
-from routers import slots
+from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
+
+from database import check_postgres, check_redis, close_connections, init_connections
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    await init_redis()
+    await init_connections()
     yield
-    # Shutdown
-    await close_redis()
+    await close_connections()
 
 
 app = FastAPI(
@@ -23,14 +21,40 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Phase 3 will restrict this to the frontend domain
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(slots.router)
-
 
 @app.get("/health")
-async def health():
-    return {"status": "ok"}
+async def health(response: Response):
+    """
+    Verify PostgreSQL and Redis are reachable.
+    Returns HTTP 200 when both are healthy, 503 otherwise.
+    """
+    postgres_ok = False
+    redis_ok = False
+    postgres_error: str | None = None
+    redis_error: str | None = None
+
+    try:
+        postgres_ok = await check_postgres()
+    except Exception as exc:
+        postgres_error = str(exc)
+
+    try:
+        redis_ok = await check_redis()
+    except Exception as exc:
+        redis_error = str(exc)
+
+    healthy = postgres_ok and redis_ok
+    if not healthy:
+        response.status_code = 503
+
+    return {
+        "status": "ok" if healthy else "degraded",
+        "postgres": {"ok": postgres_ok, "error": postgres_error},
+        "redis": {"ok": redis_ok, "error": redis_error},
+    }
