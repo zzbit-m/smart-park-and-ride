@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="theme-color" content="#0a0f1e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Smart Park & Ride</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── SCREEN 1: HOME / PARKING MAP ── -->
+  <div id="screen-home" class="screen active">
+    <header>
+      <div class="header-top">
+        <div class="logo">P<span class="accent">&</span>R</div>
+        <div class="header-info">
+          <span class="available-count" id="available-count">-- ว่าง</span>
+          <button class="refresh-btn" onclick="loadSlots()">⟳</button>
+        </div>
+      </div>
+      <h1 class="header-title">Smart Park <span class="accent">&</span> Ride</h1>
+      <p class="header-sub">เลือกช่องจอดที่ต้องการ</p>
+    </header>
+
+    <div class="legend">
+      <span class="legend-item"><span class="dot green"></span>ว่าง</span>
+      <span class="legend-item"><span class="dot yellow"></span>จอง</span>
+      <span class="legend-item"><span class="dot red"></span>ไม่ว่าง</span>
+    </div>
+
+    <div class="zone-label">โซน A — ลานจอด 1</div>
+    <div id="parking-lot"></div>
+
+    <div class="bottom-bar">
+      <button class="btn-secondary" onclick="showScreen('screen-parked')">🚗 รถของฉัน</button>
+      <button class="btn-secondary" onclick="showScreen('screen-tram')">🚃 รถราง</button>
+    </div>
+  </div>
+
+  <!-- ── SCREEN 2: HOLD CONFIRMATION ── -->
+  <div id="screen-hold" class="screen">
+    <div class="back-btn" onclick="showScreen('screen-home')">← กลับ</div>
+
+    <div class="hold-container">
+      <div class="hold-header">
+        <div class="slot-badge" id="hold-slot-code">A-01</div>
+        <h2>จองสำเร็จ!</h2>
+        <p class="hold-sub">แสดง QR Code ที่ทางเข้า</p>
+      </div>
+
+      <div class="qr-wrapper">
+        <div class="qr-box" id="qr-box">
+          <!-- QR rendered by JS -->
+          <div class="qr-placeholder">
+            <div class="qr-anim"></div>
+            <span>กำลังสร้าง QR...</span>
+          </div>
+        </div>
+        <div class="qr-token-text" id="qr-token-text"></div>
+      </div>
+
+      <div class="countdown-wrap">
+        <div class="countdown-label">หมดเวลาใน</div>
+        <div class="countdown" id="countdown">15:00</div>
+        <div class="countdown-bar-bg">
+          <div class="countdown-bar" id="countdown-bar"></div>
+        </div>
+      </div>
+
+      <button class="btn-danger" onclick="cancelHold()">ยกเลิกการจอง</button>
+    </div>
+  </div>
+
+  <!-- ── SCREEN 3: PARKED / FIND MY CAR ── -->
+  <div id="screen-parked" class="screen">
+    <div class="back-btn" onclick="showScreen('screen-home')">← กลับ</div>
+
+    <div class="parked-container">
+      <div class="parked-icon">🚗</div>
+      <h2>รถของคุณอยู่ที่</h2>
+      <div class="parked-slot" id="parked-slot-display">A-07</div>
+
+      <div class="parked-map-placeholder">
+        <div class="map-pin">📍</div>
+        <p>โซน A · แถว 1 · ช่อง 7</p>
+      </div>
+
+      <div class="tram-next">
+        <div class="tram-next-label">🚃 รถรางคันถัดไป</div>
+        <div class="tram-next-time" id="tram-next-time">กำลังโหลด...</div>
+        <div class="tram-next-dest">→ สถานีกลาง</div>
+      </div>
+
+      <button class="btn-primary" onclick="showScreen('screen-scanout')">สแกนออก QR</button>
+    </div>
+  </div>
+
+  <!-- ── SCREEN 4: SCAN OUT ── -->
+  <div id="screen-scanout" class="screen">
+    <div class="back-btn" onclick="showScreen('screen-parked')">← กลับ</div>
+
+    <div class="scanout-container">
+      <div class="scanout-icon">🔓</div>
+      <h2>ขาออก</h2>
+      <p class="scanout-sub">สแกน QR ที่ทางออกเพื่อคืนช่องจอด</p>
+
+      <div class="scanout-slot">
+        ช่องจอด: <strong id="scanout-slot-display">A-07</strong>
+      </div>
+
+      <button class="btn-primary btn-large" onclick="checkOut()">
+        ✓ ยืนยันออกจากลานจอด
+      </button>
+
+      <div class="checkout-result" id="checkout-result"></div>
+    </div>
+  </div>
+
+  <!-- ── TRAM SCREEN ── -->
+  <div id="screen-tram" class="screen">
+    <div class="back-btn" onclick="showScreen('screen-home')">← กลับ</div>
+    <div class="tram-container">
+      <h2>🚃 ตารางรถราง</h2>
+      <p class="tram-sub">อัปเดตแบบเรียลไทม์</p>
+      <div class="tram-list" id="tram-list">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TOAST ── -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
