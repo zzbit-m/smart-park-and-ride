@@ -157,6 +157,37 @@
   <!-- ── TOAST ── -->
   <div class="toast" id="toast"></div>
 
+  <!-- ── LICENSE PLATE MODAL (shown before booking is confirmed) ── -->
+  <div id="plate-modal" class="plate-modal" hidden aria-hidden="true">
+    <div class="plate-modal-overlay" id="plate-modal-overlay"></div>
+    <div class="plate-modal-card" role="dialog" aria-labelledby="plate-modal-title" aria-modal="true">
+
+      <div class="plate-modal-icon">🚘</div>
+      <h2 id="plate-modal-title" class="plate-modal-title">ยืนยันทะเบียนรถ</h2>
+      <p class="plate-modal-sub">กรอกทะเบียนรถของคุณเพื่อจองช่องจอด</p>
+
+      <div class="plate-input-wrap">
+        <label for="plate-input" class="plate-input-label">ทะเบียนรถ (License Plate)</label>
+        <input
+          id="plate-input"
+          type="text"
+          class="plate-input"
+          placeholder="เช่น กข 1234 กรุงเทพฯ"
+          maxlength="20"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+        />
+        <p class="plate-input-hint" id="plate-input-hint"></p>
+      </div>
+
+      <div class="plate-modal-actions">
+        <button type="button" id="plate-cancel-btn" class="plate-btn-cancel">ยกเลิก</button>
+        <button type="button" id="plate-confirm-btn" class="plate-btn-confirm" disabled>ยืนยันการจอง ✓</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── BOOKING TICKET MODAL ── -->
   <div id="ticket-modal" class="ticket-modal" hidden aria-hidden="true">
     <div class="ticket-modal-overlay" id="ticket-modal-overlay"></div>
@@ -179,6 +210,10 @@
         <div class="ticket-detail-row">
           <dt>ช่องจอด</dt>
           <dd id="ticket-slot-code">—</dd>
+        </div>
+        <div class="ticket-detail-row" id="ticket-plate-row" hidden>
+          <dt>ทะเบียนรถ</dt>
+          <dd id="ticket-plate" class="ticket-mono">—</dd>
         </div>
         <div class="ticket-detail-row">
           <dt>รหัสการจอง</dt>

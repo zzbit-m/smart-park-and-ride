@@ -1,5 +1,5 @@
 // ── CONFIG ──
-const API = 'http://localhost:8000';
+const API = 'http://172.20.10.2:8000';
 const SLOTS_URL = `${API}/api/slots`;
 const QR_API = 'https://api.qrserver.com/v1/create-qr-code/';
 const ACTIVE_BOOKING_KEY = 'activeBooking';
@@ -56,10 +56,10 @@ function getStoredActiveBooking() {
   }
 }
 
-function saveStoredActiveBooking({ booking_id, slot_id, slot_code, qr_token, expires_at }) {
+function saveStoredActiveBooking({ booking_id, slot_id, slot_code, qr_token, expires_at, license_plate }) {
   localStorage.setItem(
     ACTIVE_BOOKING_KEY,
-    JSON.stringify({ booking_id, slot_id, slot_code, qr_token, expires_at })
+    JSON.stringify({ booking_id, slot_id, slot_code, qr_token, expires_at, license_plate })
   );
 }
 
@@ -90,6 +90,7 @@ function reopenTicketFromStorage() {
     slotCode: booking.slot_code,
     expiresAt: new Date(booking.expires_at),
     qrToken: booking.qr_token,
+    licensePlate: booking.license_plate,
   };
   state.parkedSlot = booking.slot_code;
 
@@ -98,11 +99,12 @@ function reopenTicketFromStorage() {
     slot_code: booking.slot_code,
     qr_token: booking.qr_token,
     expires_at: booking.expires_at,
+    license_plate: booking.license_plate,
   });
 }
 
 // ── BOOKING TICKET MODAL ──
-function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at }) {
+function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at, license_plate }) {
   const modal = document.getElementById('ticket-modal');
   const expiresAt = new Date(expires_at);
 
@@ -111,6 +113,18 @@ function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at })
   document.getElementById('ticket-qr-image').src =
     `${QR_API}?size=150x150&data=${encodeURIComponent(qr_token)}`;
   document.getElementById('ticket-qr-image').alt = `QR Code for slot ${slot_code}`;
+
+  // Show / hide license plate detail row
+  const plateRow = document.getElementById('ticket-plate-row');
+  const plateEl = document.getElementById('ticket-plate');
+  if (plateRow && plateEl) {
+    if (license_plate) {
+      plateEl.textContent = license_plate;
+      plateRow.hidden = false;
+    } else {
+      plateRow.hidden = true;
+    }
+  }
 
   modal.hidden = false;
   modal.setAttribute('aria-hidden', 'false');
@@ -196,6 +210,85 @@ function initTicketModal() {
   document.getElementById('cancel-btn').addEventListener('click', cancelBookingFromModal);
 }
 
+// ── LICENSE PLATE MODAL ──
+let _pendingHoldSlotId = null;
+let _pendingHoldSlotCode = null;
+
+function openPlateModal(slotId, slotCode) {
+  _pendingHoldSlotId = slotId;
+  _pendingHoldSlotCode = slotCode;
+
+  const modal = document.getElementById('plate-modal');
+  const input = document.getElementById('plate-input');
+  const hint = document.getElementById('plate-input-hint');
+  const confirm = document.getElementById('plate-confirm-btn');
+
+  // Reset state
+  input.value = '';
+  hint.textContent = '';
+  hint.className = 'plate-input-hint';
+  confirm.disabled = true;
+
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+
+  // Focus the input after animation
+  setTimeout(() => input.focus(), 80);
+}
+
+function closePlateModal() {
+  const modal = document.getElementById('plate-modal');
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+  _pendingHoldSlotId = null;
+  _pendingHoldSlotCode = null;
+}
+
+function initPlateModal() {
+  const input = document.getElementById('plate-input');
+  const hint = document.getElementById('plate-input-hint');
+  const confirm = document.getElementById('plate-confirm-btn');
+
+  // Live validation: enable confirm only when non-empty
+  input.addEventListener('input', () => {
+    const val = input.value.trim();
+    if (val.length === 0) {
+      confirm.disabled = true;
+      hint.textContent = '';
+      hint.className = 'plate-input-hint';
+    } else if (val.length > 20) {
+      confirm.disabled = true;
+      hint.textContent = 'ทะเบียนรถต้องไม่เกิน 20 ตัวอักษร';
+      hint.className = 'plate-input-hint error';
+    } else {
+      confirm.disabled = false;
+      hint.textContent = '';
+      hint.className = 'plate-input-hint';
+    }
+  });
+
+  // Enter key submits if confirm is enabled
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !confirm.disabled) {
+      confirm.click();
+    }
+  });
+
+  document.getElementById('plate-cancel-btn').addEventListener('click', closePlateModal);
+  document.getElementById('plate-modal-overlay').addEventListener('click', closePlateModal);
+
+  confirm.addEventListener('click', async () => {
+    const plate = input.value.trim().toUpperCase();
+    if (!plate) return;
+
+    const slotId = _pendingHoldSlotId;
+    const slotCode = _pendingHoldSlotCode;
+
+    closePlateModal();
+    await holdSlot(slotId, slotCode, plate);
+  });
+}
+
 // ── PARKING LOT CLICK (event delegation — survives re-renders) ──
 function initParkingLotClicks() {
   const lot = document.getElementById('parking-lot');
@@ -208,7 +301,8 @@ function initParkingLotClicks() {
     if (!slotId || !slotCode) return;
 
     if (slotEl.classList.contains('available')) {
-      holdSlot(slotId, slotCode);
+      // Open plate verification modal instead of booking immediately
+      openPlateModal(slotId, slotCode);
       return;
     }
 
@@ -354,7 +448,7 @@ function makeSlotEl(slot) {
 }
 
 // ── HOLD A SLOT ──
-async function holdSlot(slotId, slotCode) {
+async function holdSlot(slotId, slotCode, licensePlate) {
   if (hasActiveStoredBooking()) {
     alert('คุณมีการจองที่กำลังใช้งานอยู่แล้ว (You already have an active booking)');
     return;
@@ -363,7 +457,11 @@ async function holdSlot(slotId, slotCode) {
   showToast(`กำลังจอง ${slotCode}...`);
 
   try {
-    const res = await fetch(`${API}/api/slots/${slotId}/hold`, { method: 'POST' });
+    const res = await fetch(`${API}/api/slots/${slotId}/hold`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ license_plate: licensePlate }),
+    });
 
     if (res.status === 400 || res.status === 409) {
       showToast('❌ ช่องนี้ถูกจองแล้ว');
@@ -381,6 +479,7 @@ async function holdSlot(slotId, slotCode) {
       slot_code: data.slot_code,
       qr_token: data.qr_token,
       expires_at: data.expires_at,
+      license_plate: licensePlate,
     });
 
     state.activeBooking = {
@@ -450,7 +549,7 @@ function startCountdown(expiresAt) {
     const mins = Math.floor(remaining / 60000);
     const secs = Math.floor((remaining % 60000) / 1000);
     document.getElementById('countdown').textContent =
-      `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+      `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     const pct = (remaining / totalMs) * 100;
     const bar = document.getElementById('countdown-bar');
     bar.style.width = `${pct}%`;
@@ -562,6 +661,7 @@ async function renderTramSchedule() {
 
 
 // ── INIT ──
+initPlateModal();
 initTicketModal();
 initParkingLotClicks();
 loadSlots();

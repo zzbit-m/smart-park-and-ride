@@ -4,12 +4,14 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import check_postgres, check_redis, close_connections, init_connections
-from routers import slots, trams
+from auto_seed import auto_seed
+from routers import admin, slots, trams
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_connections()
+    await auto_seed()   # no-op when parking_slots already has rows
     yield
     await close_connections()
 
@@ -28,6 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin.router, prefix="/api")
 app.include_router(slots.router, prefix="/api")
 app.include_router(trams.router, prefix="/api")
 

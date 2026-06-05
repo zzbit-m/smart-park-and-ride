@@ -51,6 +51,7 @@ CREATE TABLE bookings (
     slot_id         INT NOT NULL REFERENCES parking_slots(id),
     status          booking_status NOT NULL DEFAULT 'held',
     qr_token        VARCHAR(128) UNIQUE NOT NULL,
+    license_plate   VARCHAR(20),
     held_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at      TIMESTAMPTZ NOT NULL,
     checked_in_at   TIMESTAMPTZ,
