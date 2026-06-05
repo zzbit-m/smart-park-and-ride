@@ -1,12 +1,15 @@
 /* ─────────────────────────────────────────────────────
    admin.js — Gate Scanner Logic + Auth
-   Login        : POST http://localhost:8000/api/admin/login
-   Scan-In      : POST http://localhost:8000/api/slots/scan        (Auth required)
-   Scan-Out     : POST http://localhost:8000/api/slots/scan-out    (Auth required)
-   Manual Release: POST http://localhost:8000/api/slots/manual-release (Auth required)
+   Login         : POST {API_BASE}/api/admin/login
+   Scan-In       : POST {API_BASE}/api/slots/scan        (Auth required)
+   Scan-Out      : POST {API_BASE}/api/slots/scan-out    (Auth required)
+   Manual Release: POST {API_BASE}/api/slots/manual-release (Auth required)
+   API_BASE is read from window.APP_CONFIG (set by config.js).
 ───────────────────────────────────────────────────── */
 
-const API_BASE = 'http://172.20.10.2:8000';
+// API_BASE is set by frontend/config.js (loaded before this script).
+// Falls back to localhost for safety if config.js is missing.
+const API_BASE = (window.APP_CONFIG && window.APP_CONFIG.API_BASE) || 'http://localhost:8000';
 const API_LOGIN = `${API_BASE}/api/admin/login`;
 const API_SCAN_IN = `${API_BASE}/api/slots/scan`;
 const API_SCAN_OUT = `${API_BASE}/api/slots/scan-out`;

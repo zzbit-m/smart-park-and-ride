@@ -230,7 +230,10 @@ async def get_analytics(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/seed", response_model=SeedResponse)
-async def seed_slots(db: AsyncSession = Depends(get_db)):
+async def seed_slots(
+    _: str = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Temporary dev endpoint: seed zones, 20 parking slots (A1–A10, B1–B10),
     and the placeholder user for bookings.

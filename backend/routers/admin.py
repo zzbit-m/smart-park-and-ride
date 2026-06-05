@@ -24,9 +24,15 @@ from redis_client import get_all_slot_statuses
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# ── Hardcoded credentials (replace with DB lookup + bcrypt in production) ──
-_ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-_ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "password123")
+# ── Credentials — must be set via environment variables (no defaults) ─────────
+_ADMIN_USERNAME: str | None = os.getenv("ADMIN_USERNAME")
+_ADMIN_PASSWORD: str | None = os.getenv("ADMIN_PASSWORD")
+
+if not _ADMIN_USERNAME or not _ADMIN_PASSWORD:
+    raise RuntimeError(
+        "Admin credentials must be provided via environment variables: "
+        "ADMIN_USERNAME and ADMIN_PASSWORD"
+    )
 
 # Derive a deterministic token from the credentials + a salt so the token
 # is stable across restarts (no JWT library required).

@@ -1,8 +1,11 @@
 // ── CONFIG ──
-const API = 'http://172.20.10.2:8000';
+// API_BASE is set by frontend/config.js (loaded before this script).
+// Falls back to localhost for safety if config.js is missing.
+const API = (window.APP_CONFIG && window.APP_CONFIG.API_BASE) || 'http://localhost:8000';
 const SLOTS_URL = `${API}/api/slots`;
 const QR_API = 'https://api.qrserver.com/v1/create-qr-code/';
 const ACTIVE_BOOKING_KEY = 'activeBooking';
+
 
 // ── STATE ──
 let state = {
