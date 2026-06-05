@@ -1,5 +1,5 @@
 // ── CONFIG ──
-const API = 'http://localhost:8000';
+const API = 'http://172.20.10.2:8000';
 const SLOTS_URL = `${API}/api/slots`;
 const QR_API = 'https://api.qrserver.com/v1/create-qr-code/';
 const ACTIVE_BOOKING_KEY = 'activeBooking';
@@ -116,7 +116,7 @@ function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at, l
 
   // Show / hide license plate detail row
   const plateRow = document.getElementById('ticket-plate-row');
-  const plateEl  = document.getElementById('ticket-plate');
+  const plateEl = document.getElementById('ticket-plate');
   if (plateRow && plateEl) {
     if (license_plate) {
       plateEl.textContent = license_plate;
@@ -211,23 +211,23 @@ function initTicketModal() {
 }
 
 // ── LICENSE PLATE MODAL ──
-let _pendingHoldSlotId   = null;
+let _pendingHoldSlotId = null;
 let _pendingHoldSlotCode = null;
 
 function openPlateModal(slotId, slotCode) {
-  _pendingHoldSlotId   = slotId;
+  _pendingHoldSlotId = slotId;
   _pendingHoldSlotCode = slotCode;
 
-  const modal   = document.getElementById('plate-modal');
-  const input   = document.getElementById('plate-input');
-  const hint    = document.getElementById('plate-input-hint');
+  const modal = document.getElementById('plate-modal');
+  const input = document.getElementById('plate-input');
+  const hint = document.getElementById('plate-input-hint');
   const confirm = document.getElementById('plate-confirm-btn');
 
   // Reset state
-  input.value        = '';
-  hint.textContent   = '';
-  hint.className     = 'plate-input-hint';
-  confirm.disabled   = true;
+  input.value = '';
+  hint.textContent = '';
+  hint.className = 'plate-input-hint';
+  confirm.disabled = true;
 
   modal.hidden = false;
   modal.setAttribute('aria-hidden', 'false');
@@ -240,30 +240,30 @@ function closePlateModal() {
   const modal = document.getElementById('plate-modal');
   modal.hidden = true;
   modal.setAttribute('aria-hidden', 'true');
-  _pendingHoldSlotId   = null;
+  _pendingHoldSlotId = null;
   _pendingHoldSlotCode = null;
 }
 
 function initPlateModal() {
-  const input   = document.getElementById('plate-input');
-  const hint    = document.getElementById('plate-input-hint');
+  const input = document.getElementById('plate-input');
+  const hint = document.getElementById('plate-input-hint');
   const confirm = document.getElementById('plate-confirm-btn');
 
   // Live validation: enable confirm only when non-empty
   input.addEventListener('input', () => {
     const val = input.value.trim();
     if (val.length === 0) {
-      confirm.disabled   = true;
-      hint.textContent   = '';
-      hint.className     = 'plate-input-hint';
+      confirm.disabled = true;
+      hint.textContent = '';
+      hint.className = 'plate-input-hint';
     } else if (val.length > 20) {
-      confirm.disabled   = true;
-      hint.textContent   = 'ทะเบียนรถต้องไม่เกิน 20 ตัวอักษร';
-      hint.className     = 'plate-input-hint error';
+      confirm.disabled = true;
+      hint.textContent = 'ทะเบียนรถต้องไม่เกิน 20 ตัวอักษร';
+      hint.className = 'plate-input-hint error';
     } else {
-      confirm.disabled   = false;
-      hint.textContent   = '';
-      hint.className     = 'plate-input-hint';
+      confirm.disabled = false;
+      hint.textContent = '';
+      hint.className = 'plate-input-hint';
     }
   });
 
@@ -281,7 +281,7 @@ function initPlateModal() {
     const plate = input.value.trim().toUpperCase();
     if (!plate) return;
 
-    const slotId   = _pendingHoldSlotId;
+    const slotId = _pendingHoldSlotId;
     const slotCode = _pendingHoldSlotCode;
 
     closePlateModal();
@@ -296,7 +296,7 @@ function initParkingLotClicks() {
     const slotEl = event.target.closest('.lot-slot');
     if (!slotEl) return;
 
-    const slotId   = Number(slotEl.dataset.slotId);
+    const slotId = Number(slotEl.dataset.slotId);
     const slotCode = slotEl.dataset.slotCode;
     if (!slotId || !slotCode) return;
 
@@ -549,7 +549,7 @@ function startCountdown(expiresAt) {
     const mins = Math.floor(remaining / 60000);
     const secs = Math.floor((remaining % 60000) / 1000);
     document.getElementById('countdown').textContent =
-      `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+      `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     const pct = (remaining / totalMs) * 100;
     const bar = document.getElementById('countdown-bar');
     bar.style.width = `${pct}%`;

@@ -174,10 +174,94 @@
 
 ---
 
-## 4. Current File Structure
+### Phase 3b — Admin Portal with Login & Gate Scanner ✅
+
+**Files:** `frontend/admin.html`, `frontend/admin.js`, `frontend/style.css`
+
+#### Admin Authentication
+- Login overlay (`#login-overlay`) shown until authenticated; hides on success
+- `POST /api/admin/login` returns a Bearer token stored in `localStorage` under key `adminToken`
+- `authHeaders()` helper attaches `Authorization: Bearer <token>` on every protected API call
+- 401 responses from any endpoint auto-trigger `handle401()` → clears token, shows login overlay with session-expired message
+- Logout clears token, resets form, returns to login overlay
+
+#### Gate Scanner (Manual Token Input)
+- `#qr-input` text field accepts pasted or USB-barcode-reader QR token
+- **Scan In** button → `POST /api/slots/scan` (requires Bearer token)
+- **Scan Out** button → `POST /api/slots/scan-out` (requires Bearer token)
+- Enter key on input triggers Scan In for speed
+- Clear button (`✕`) appears only when input has a value
+- Result message animates in/out below the button row (success = green, error = red)
+
+#### Admin Manual Override Card
+- Separate card with amber accent border
+- Slot code input → `POST /api/slots/manual-release` (requires Bearer token)
+- Used when a driver exits without scanning out (forgotten checkout)
+- Shows its own result banner independent of the scanner card
+
+#### Recent Scans Log
+- In-memory session log (max 20 entries, oldest auto-removed)
+- Each entry shows: mode badge (`[IN]` / `[OUT]` / `[MANUAL]`), truncated token, success/error status, timestamp
+- "ล้าง" button clears the in-page log
+
+#### Backend Endpoints Used
+| Endpoint | Method | Auth | Purpose |
+|---|---|---|---|
+| `/api/admin/login` | POST | None | Returns Bearer token |
+| `/api/slots/scan` | POST | Bearer | Scan-In: mark slot occupied |
+| `/api/slots/scan-out` | POST | Bearer | Scan-Out: mark booking completed |
+| `/api/slots/manual-release` | POST | Bearer | Force-release slot by code |
+
+---
+
+### Phase 3c — Hardware/IoT Integration: Camera QR Scanner ✅
+
+**Tested:** 2026-06-05 — E2E scan-in flow verified via webcam ✅
+
+**Files changed:** `frontend/admin.html`, `frontend/admin.js`, `frontend/style.css`
+
+#### Library
+- `html5-qrcode@2.3.8` loaded via CDN (`unpkg.com`) — no build step required
+- Uses the browser's native `getUserMedia` API (requires HTTPS or localhost; works over LAN via IP when page is served)
+
+#### Camera Scanner UI Card (`.camera-card`)
+- **Header row:** camera icon + title/subtitle + **▶ เปิดกล้อง** toggle button
+- Toggle button turns green and shows **⏹ ปิดกล้อง** when camera is active
+- `#qr-reader-wrap` (hidden by default) contains:
+  - `#qr-reader` — `html5-qrcode` mounts the `<video>` feed here
+  - `.camera-laser` — animated red laser sweep overlay (`@keyframes laserSweep`)
+- On successful decode, scanning **pauses** and `#camera-decoded` panel appears with:
+  - Truncated token preview
+  - **Scan In** / **Scan Out** / **🔄 Rescan** action buttons
+- Camera card flashes green on decode (`.camera-card--flash` keyframe)
+- After Scan In or Scan Out action completes, camera stops automatically
+- **Rescan** restarts the reader for the next ticket without reloading the page
+
+#### JS Architecture (camera module in `admin.js`)
+- `initCameraScanner()` — wires toggle + action buttons; called at end of `DOMContentLoaded`
+- `startCamera()` — creates `Html5Qrcode` singleton, calls `.start({ facingMode: 'environment' }, ...)`, shows viewfinder + laser, updates button state
+- `stopCamera()` — calls `.stop()` + `.clear()`, hides viewfinder, resets button state
+- `resumeCamera()` — used by Rescan: stops then immediately restarts
+- `onQrDecodeSuccess(decodedText)` — deduplicates rapid fires, pauses scanner, shows decoded panel, also populates `#qr-input` fallback (so Enter-to-scan also works)
+- `handleCameraAction(mode)` — delegates to existing `doScan()` (which uses `authHeaders()`), then calls `stopCamera()`
+
+#### CSS additions (end of `style.css`)
+- `.camera-card`, `.camera-card-header`, `.camera-card-title-row` — layout
+- `.btn-camera-toggle` (blue idle) + `.btn-camera-toggle--active` (green) — toggle button states
+- `.camera-viewfinder` + `#qr-reader` overrides — strips the library's default border/background
+- `.camera-laser` + `.camera-laser--active` + `@keyframes laserSweep` — animated sweep
+- `.camera-decoded`, `.camera-decoded-inner`, `.camera-decoded-token` — decoded panel
+- `.camera-action-row`, `.btn-cam-action`, `.btn-cam-rescan` — action row
+- `.camera-card--flash` + `@keyframes cameraFlash` — green glow on decode
+
+#### Real Device Testing (Mobile Hotspot)
+- Both `app.js` and `admin.js` updated `API_BASE` to `http://172.20.10.2:8000` (laptop's hotspot IP)
+- Phone accessed admin panel over Wi-Fi; webcam used as camera input during test
+- Full Scan-In flow confirmed: QR decoded → Bearer token sent → backend marks slot `occupied` → success toast ✅
+
 
 ```
-parking/
+smart-park-and-ride/
 ├── project_state.md              ← this file
 ├── docker-compose.yml            ← spins up postgres + redis + backend
 ├── db/
@@ -186,16 +270,21 @@ parking/
 │       └── 001_add_license_plate.sql  ← ALTER TABLE bookings ADD COLUMN license_plate
 ├── backend/
 │   ├── Dockerfile                ← python:3.11-slim, installs requirements
-│   ├── requirements.txt          ← fastapi, uvicorn, asyncpg, sqlalchemy, redis, python-jose
-│   ├── main.py                   ← FastAPI app, CORS, lifespan, router include
+│   ├── requirements.txt          ← fastapi, uvicorn, asyncpg, sqlalchemy, aioredis
+│   ├── main.py                   ← FastAPI app, CORS, lifespan, router includes
 │   ├── database.py               ← async SQLAlchemy engine + get_db() dependency
+│   ├── auto_seed.py              ← seeds parking slots on first start
 │   ├── redis_client.py           ← Redis client, Lua lock script, slot helpers
 │   └── routers/
-│       └── slots.py              ← GET /slots/, POST /slots/{id}/hold (with license_plate), DELETE /slots/{id}/hold
+│       ├── admin.py              ← POST /api/admin/login, verify_admin_token dependency
+│       ├── slots.py              ← CRUD + scan-in/out + manual-release + analytics
+│       └── trams.py              ← tram schedule endpoints
 └── frontend/
-    ├── index.html                ← 5 screens + plate-modal + ticket-modal
-    ├── style.css                 ← full design system, parking lot styles, plate-modal CSS
-    └── app.js                    ← state management, plate modal logic, API calls, rendering
+    ├── index.html                ← User PWA: 5 screens + plate-modal + ticket-modal
+    ├── app.js                    ← User state management, API calls, rendering
+    ├── admin.html                ← Admin portal: login overlay + camera scanner + manual fallback + override + log
+    ├── admin.js                  ← Admin auth, gate scanner logic, camera QR module (html5-qrcode)
+    └── style.css                 ← Shared design system for both user PWA and admin portal
 ```
 
 ---
@@ -235,49 +324,35 @@ ALTER TABLE bookings
 
 ## 6. Pending Tasks / Exact Next Steps
 
-### Phase 4 — Admin Dashboard & Tram Analytics
+### Phase 4 — Dashboard & Analytics Tab (Next)
 
-**File to create:** `frontend/admin.html` (separate page, not part of user PWA)
+1. **Live Slot Stats Dashboard** — add a second tab to `admin.html` showing:
+   - Real-time slot counts (total / available / held / occupied) via `GET /api/slots/`
+   - Auto-refresh every 10 s
+   - Doughnut chart (Chart.js) showing slot distribution
 
-**Features to build:**
+2. **Peak Hours / Weekly Traffic Charts** — already implemented in `backend/routers/slots.py` as `GET /api/slots/analytics`; wire up bar charts in the admin dashboard tab
 
-1. **Live Operations Dashboard**
-   - Full parking lot grid (same layout as user view, read-only)
-   - Real-time slot counts: total / available / held / occupied
-   - Auto-refresh every 10s via polling or WebSocket
+3. **Tram Dispatch Alerts** — show zones where occupied % exceeds threshold; trigger alert card
 
-2. **Peak Hours Chart**
-   - Bar chart of booking density by hour of day (0–23)
-   - Data source: `SELECT EXTRACT(HOUR FROM held_at), COUNT(*) FROM bookings GROUP BY 1`
-   - Recommend: use Chart.js (CDN, no install) for rendering
+4. **Anomaly Detection Panel** — `SELECT * FROM bookings WHERE flagged = TRUE ORDER BY held_at DESC LIMIT 20`
 
-3. **Tram Dispatch Alerts**
-   - Show zones where occupied count exceeds threshold (e.g. >80% full)
-   - Trigger visual alert card: "ส่งรถไปโซน A — คนเยอะ"
-
-4. **Anomaly Detection Panel**
-   - Query: `SELECT * FROM bookings WHERE flagged = TRUE ORDER BY held_at DESC LIMIT 20`
-   - Display as a table with slot_code, user_id, held_at, checked_in_at, checked_out_at
-
-5. **Backend endpoints needed (add to `routers/admin.py`):**
-   - `GET /admin/stats` — returns counts per status
-   - `GET /admin/peak-hours` — returns hourly booking counts
-   - `GET /admin/anomalies` — returns flagged bookings
-
-### Phase 5 — Dockerization Polish
+### Phase 5 — Dockerization & Production Polish
 
 - Add `frontend/` as a static file server (nginx container) to docker-compose
 - Restrict CORS in `main.py` to only the frontend origin
-- Add `.env` file for secrets (DB password, JWT secret key)
+- Add `.env` file for secrets (DB password, admin credentials)
 - Replace placeholder `qr_token` (UUID) with signed JWT using `python-jose`
-- Add placeholder user (`00000000-0000-0000-0000-000000000001`) seed in `schema.sql`
 - Add `nginx.conf` for frontend serving + proxy pass to backend on `/api`
+- Move `API_BASE` to a config file / env var so it doesn't need manual edits for device testing
 
 ### Known TODOs / Technical Debt
 
-- ~~License plate not collected during booking~~ → **Fixed in Upgrade Branch** ✅
+- ~~License plate not collected during booking~~ → **Fixed** ✅
+- ~~Admin portal not built~~ → **Fixed** ✅
+- ~~QR camera scanner for admin~~ → **Fixed & E2E tested** ✅
 - `user_id` in `POST /slots/{id}/hold` is hardcoded to a placeholder UUID — real auth (phone-based login + JWT) not yet implemented
-- QR code uses external `api.qrserver.com` — consider self-hosted `qrcode.js` CDN for offline support
-- Background worker (expiry sweep + penalty calculation) is designed but not yet coded — needs to be added to `main.py` as an asyncio background task
-- `parking_slots` table is empty — needs seed data (INSERT 20 slots into zone 1)
-- `last_known_status` on `parking_slots` is not being updated on hold/release — only Redis holds live state; recovery path not yet implemented
+- QR code uses external `api.qrserver.com` — consider self-hosted `qrcode.js` for offline/LAN support
+- Background worker (expiry sweep + penalty calculation) is designed but not yet coded
+- `API_BASE` in `admin.js` and `app.js` currently hardcoded to `172.20.10.2:8000` (hotspot IP from device testing) — revert to `localhost:8000` before next local-only session
+- `last_known_status` on `parking_slots` not updated on hold — only Redis holds live state; recovery path not yet implemented

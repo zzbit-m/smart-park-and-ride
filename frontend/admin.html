@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="style.css" />
   <!-- html5-qrcode — camera QR scanner -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- Chart.js — dashboard charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body class="admin-body">
 
@@ -96,6 +98,19 @@
         <span class="status-text">ระบบพร้อมใช้งาน</span>
         <span class="status-endpoint">POST /api/slots/scan &amp; /scan-out</span>
       </div>
+
+      <!-- ── TAB NAV ── -->
+      <nav class="admin-tab-nav" role="tablist" aria-label="Admin sections">
+        <button id="tab-scanner" class="admin-tab admin-tab--active" role="tab" aria-selected="true" aria-controls="panel-scanner">
+          <span class="admin-tab-icon">📷</span> Scanner
+        </button>
+        <button id="tab-dashboard" class="admin-tab" role="tab" aria-selected="false" aria-controls="panel-dashboard">
+          <span class="admin-tab-icon">📊</span> Dashboard
+        </button>
+      </nav>
+
+      <!-- ── PANEL: SCANNER ── -->
+      <div id="panel-scanner" class="admin-panel" role="tabpanel" aria-labelledby="tab-scanner">
 
       <!-- ── Camera QR Scanner card ── -->
       <div class="admin-card camera-card" id="camera-card">
@@ -244,6 +259,88 @@
           <div class="log-empty">ยังไม่มีการสแกน</div>
         </div>
       </div>
+
+      </div><!-- /panel-scanner -->
+
+      <!-- ── PANEL: DASHBOARD ── -->
+      <div id="panel-dashboard" class="admin-panel" role="tabpanel" aria-labelledby="tab-dashboard" hidden>
+
+        <!-- KPI stat cards -->
+        <div class="dash-kpi-row">
+          <div class="dash-kpi-card dash-kpi-card--total">
+            <span class="dash-kpi-icon">🅿️</span>
+            <div class="dash-kpi-body">
+              <span class="dash-kpi-label">Total Slots</span>
+              <span class="dash-kpi-value" id="kpi-total">—</span>
+            </div>
+          </div>
+          <div class="dash-kpi-card dash-kpi-card--available">
+            <span class="dash-kpi-icon">✅</span>
+            <div class="dash-kpi-body">
+              <span class="dash-kpi-label">Available</span>
+              <span class="dash-kpi-value" id="kpi-available">—</span>
+            </div>
+          </div>
+          <div class="dash-kpi-card dash-kpi-card--held">
+            <span class="dash-kpi-icon">⏳</span>
+            <div class="dash-kpi-body">
+              <span class="dash-kpi-label">Reserved</span>
+              <span class="dash-kpi-value" id="kpi-held">—</span>
+            </div>
+          </div>
+          <div class="dash-kpi-card dash-kpi-card--occupied">
+            <span class="dash-kpi-icon">🚗</span>
+            <div class="dash-kpi-body">
+              <span class="dash-kpi-label">Occupied</span>
+              <span class="dash-kpi-value" id="kpi-occupied">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart card -->
+        <div class="admin-card dash-chart-card">
+          <div class="dash-chart-header">
+            <div>
+              <p class="dash-chart-title">Slot Occupancy</p>
+              <p class="dash-chart-sub">Live distribution of parking slot statuses</p>
+            </div>
+            <button id="dash-refresh-btn" class="btn-dash-refresh" title="Refresh stats">
+              🔄 Refresh
+            </button>
+          </div>
+
+          <!-- Doughnut chart + centre legend -->
+          <div class="dash-chart-wrap">
+            <div class="dash-canvas-wrap">
+              <canvas id="stats-chart" width="260" height="260" aria-label="Parking slot status chart" role="img"></canvas>
+              <div class="dash-chart-centre" id="dash-centre">
+                <span class="dash-centre-value" id="dash-centre-value">—</span>
+                <span class="dash-centre-label">ใช้งานอยู่</span>
+              </div>
+            </div>
+            <div class="dash-legend" id="dash-legend">
+              <div class="dash-legend-item">
+                <span class="dash-legend-dot" style="background:#00e5a0"></span>
+                <span class="dash-legend-label">ว่าง</span>
+                <span class="dash-legend-pct" id="legend-available-pct">—%</span>
+              </div>
+              <div class="dash-legend-item">
+                <span class="dash-legend-dot" style="background:#f5c542"></span>
+                <span class="dash-legend-label">จองแล้ว</span>
+                <span class="dash-legend-pct" id="legend-held-pct">—%</span>
+              </div>
+              <div class="dash-legend-item">
+                <span class="dash-legend-dot" style="background:#ff4d6d"></span>
+                <span class="dash-legend-label">มีรถจอด</span>
+                <span class="dash-legend-pct" id="legend-occupied-pct">—%</span>
+              </div>
+            </div>
+          </div>
+
+          <p class="dash-last-updated" id="dash-last-updated">Auto-refresh every 30 s</p>
+        </div>
+
+      </div><!-- /panel-dashboard -->
 
     </main>
 

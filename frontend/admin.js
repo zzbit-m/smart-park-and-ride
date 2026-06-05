@@ -6,11 +6,12 @@
    Manual Release: POST http://localhost:8000/api/slots/manual-release (Auth required)
 ───────────────────────────────────────────────────── */
 
-const API_BASE          = 'http://localhost:8000';
-const API_LOGIN         = `${API_BASE}/api/admin/login`;
-const API_SCAN_IN       = `${API_BASE}/api/slots/scan`;
-const API_SCAN_OUT      = `${API_BASE}/api/slots/scan-out`;
+const API_BASE = 'http://172.20.10.2:8000';
+const API_LOGIN = `${API_BASE}/api/admin/login`;
+const API_SCAN_IN = `${API_BASE}/api/slots/scan`;
+const API_SCAN_OUT = `${API_BASE}/api/slots/scan-out`;
 const API_MANUAL_RELEASE = `${API_BASE}/api/slots/manual-release`;
+const API_STATS = `${API_BASE}/api/admin/stats`;
 
 const TOKEN_KEY = 'adminToken';
 
@@ -64,11 +65,11 @@ function showLoginOverlay(errorMsg = '') {
 async function performLogin(e) {
   e.preventDefault();
 
-  const username  = document.getElementById('login-username').value.trim();
-  const password  = document.getElementById('login-password').value;
-  const errorEl   = document.getElementById('login-error');
-  const loginBtn  = document.getElementById('login-btn');
-  const btnText   = document.getElementById('login-btn-text');
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errorEl = document.getElementById('login-error');
+  const loginBtn = document.getElementById('login-btn');
+  const btnText = document.getElementById('login-btn-text');
 
   if (!username || !password) {
     errorEl.textContent = '⚠️ กรุณากรอก Username และ Password';
@@ -399,6 +400,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
   /* ── Camera scanner wiring ── */
   initCameraScanner();
+
+  /* ── Tab navigation ── */
+  initTabNav();
+
+  /* ── Dashboard module ── */
+  initDashboard();
 });
 
 /* ══════════════════════════════════════════════════════
@@ -422,10 +429,10 @@ const CAMERA_CONFIG = {
 };
 
 function initCameraScanner() {
-  const toggleBtn     = getEl('camera-toggle-btn');
-  const camScanInBtn  = getEl('cam-scan-in-btn');
+  const toggleBtn = getEl('camera-toggle-btn');
+  const camScanInBtn = getEl('cam-scan-in-btn');
   const camScanOutBtn = getEl('cam-scan-out-btn');
-  const camRescanBtn  = getEl('cam-rescan-btn');
+  const camRescanBtn = getEl('cam-rescan-btn');
 
   if (!toggleBtn) return; // camera card not in DOM
 
@@ -437,20 +444,20 @@ function initCameraScanner() {
     }
   });
 
-  if (camScanInBtn)  camScanInBtn.addEventListener('click',  () => handleCameraAction('in'));
+  if (camScanInBtn) camScanInBtn.addEventListener('click', () => handleCameraAction('in'));
   if (camScanOutBtn) camScanOutBtn.addEventListener('click', () => handleCameraAction('out'));
-  if (camRescanBtn)  camRescanBtn.addEventListener('click',  resumeCamera);
+  if (camRescanBtn) camRescanBtn.addEventListener('click', resumeCamera);
 }
 
 /* ── Start camera ── */
 async function startCamera() {
-  const readerWrap   = getEl('qr-reader-wrap');
-  const toggleBtn    = getEl('camera-toggle-btn');
-  const toggleText   = getEl('camera-toggle-text');
-  const laser        = getEl('camera-laser');
-  const hint         = getEl('camera-hint');
+  const readerWrap = getEl('qr-reader-wrap');
+  const toggleBtn = getEl('camera-toggle-btn');
+  const toggleText = getEl('camera-toggle-text');
+  const laser = getEl('camera-laser');
+  const hint = getEl('camera-hint');
   const decodedPanel = getEl('camera-decoded');
-  const cameraCard   = getEl('camera-card');
+  const cameraCard = getEl('camera-card');
 
   // Reset decoded panel
   decodedPanel.hidden = true;
@@ -474,7 +481,7 @@ async function startCamera() {
       { facingMode: 'environment' },
       CAMERA_CONFIG,
       onQrDecodeSuccess,
-      /* onScanFailure */ () => { /* silent — fires every frame */ }
+      /* onScanFailure */() => { /* silent — fires every frame */ }
     );
     _cameraActive = true;
 
@@ -498,10 +505,10 @@ async function startCamera() {
 /* ── Stop camera completely ── */
 async function stopCamera() {
   const readerWrap = getEl('qr-reader-wrap');
-  const laser      = getEl('camera-laser');
-  const toggleBtn  = getEl('camera-toggle-btn');
+  const laser = getEl('camera-laser');
+  const toggleBtn = getEl('camera-toggle-btn');
   const toggleText = getEl('camera-toggle-text');
-  const hint       = getEl('camera-hint');
+  const hint = getEl('camera-hint');
 
   if (_html5QrCode) {
     try {
@@ -588,21 +595,21 @@ async function handleCameraAction(mode) {
   const token = _lastDecodedToken;
   if (!token) return;
 
-  const inBtn  = getEl('cam-scan-in-btn');
+  const inBtn = getEl('cam-scan-in-btn');
   const outBtn = getEl('cam-scan-out-btn');
 
   // Disable both camera action buttons during request
-  if (inBtn)  inBtn.disabled  = true;
+  if (inBtn) inBtn.disabled = true;
   if (outBtn) outBtn.disabled = true;
 
-  const apiUrl      = mode === 'in' ? API_SCAN_IN : API_SCAN_OUT;
-  const defaultLbl  = mode === 'in' ? 'เปิดไม้กั้น (Scan In)' : 'สแกนรถออก (Scan Out)';
-  const manualBtn   = getEl(mode === 'in' ? 'scan-btn' : 'scan-out-btn');
+  const apiUrl = mode === 'in' ? API_SCAN_IN : API_SCAN_OUT;
+  const defaultLbl = mode === 'in' ? 'เปิดไม้กั้น (Scan In)' : 'สแกนรถออก (Scan Out)';
+  const manualBtn = getEl(mode === 'in' ? 'scan-btn' : 'scan-out-btn');
 
   await doScan(apiUrl, token, manualBtn, defaultLbl, mode);
 
   // Re-enable cam buttons
-  if (inBtn)  inBtn.disabled  = false;
+  if (inBtn) inBtn.disabled = false;
   if (outBtn) outBtn.disabled = false;
 
   // After a successful action, stop the camera so staff can prepare next scan
@@ -610,3 +617,213 @@ async function handleCameraAction(mode) {
   getEl('camera-decoded').hidden = true;
   _lastDecodedToken = '';
 }
+
+/* ══════════════════════════════════════════════════════
+   TAB NAVIGATION
+   Switches between #panel-scanner and #panel-dashboard.
+   Stops the camera automatically when leaving the Scanner tab.
+══════════════════════════════════════════════════════ */
+
+function initTabNav() {
+  const tabScanner   = getEl('tab-scanner');
+  const tabDashboard = getEl('tab-dashboard');
+  const panelScanner   = getEl('panel-scanner');
+  const panelDashboard = getEl('panel-dashboard');
+
+  if (!tabScanner || !tabDashboard) return;
+
+  function activateTab(tab) {
+    const isScanner = (tab === tabScanner);
+
+    // Update tab buttons
+    tabScanner.classList.toggle('admin-tab--active', isScanner);
+    tabScanner.setAttribute('aria-selected', String(isScanner));
+    tabDashboard.classList.toggle('admin-tab--active', !isScanner);
+    tabDashboard.setAttribute('aria-selected', String(!isScanner));
+
+    // Show / hide panels
+    panelScanner.hidden   = !isScanner;
+    panelDashboard.hidden = isScanner;
+
+    // If leaving scanner → stop camera
+    if (!isScanner && _cameraActive) stopCamera();
+
+    // If entering dashboard → fetch fresh stats
+    if (!isScanner) fetchStats();
+  }
+
+  tabScanner.addEventListener('click',   () => activateTab(tabScanner));
+  tabDashboard.addEventListener('click', () => activateTab(tabDashboard));
+}
+
+/* ══════════════════════════════════════════════════════
+   DASHBOARD MODULE — Chart.js doughnut + KPI cards
+   GET /api/admin/stats  (Bearer token required)
+   Auto-refreshes every 30 s while dashboard panel is visible.
+══════════════════════════════════════════════════════ */
+
+let _statsChart      = null;  // Chart.js instance (singleton)
+let _dashRefreshTimer = null;
+
+const DASH_REFRESH_MS = 30_000; // 30 seconds
+
+const CHART_COLORS = {
+  available: '#00e5a0',
+  held:      '#f5c542',
+  occupied:  '#ff4d6d',
+  empty:     'rgba(255,255,255,0.06)',
+};
+
+function initDashboard() {
+  const refreshBtn = getEl('dash-refresh-btn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = '⏳ Refreshing…';
+      fetchStats().finally(() => {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '🔄 Refresh';
+      });
+    });
+  }
+
+  // Build the chart once (on empty data) so the canvas is ready
+  buildChart({ total: 0, available: 0, held: 0, occupied: 0 });
+
+  // Start auto-refresh (only ticks; actual fetch triggered on tab switch)
+  _dashRefreshTimer = setInterval(() => {
+    // Only fetch if the dashboard panel is currently visible
+    const panel = getEl('panel-dashboard');
+    if (panel && !panel.hidden) fetchStats();
+  }, DASH_REFRESH_MS);
+}
+
+/* ── Fetch stats from the backend ── */
+async function fetchStats() {
+  const lastUpdatedEl = getEl('dash-last-updated');
+  if (lastUpdatedEl) lastUpdatedEl.textContent = 'กำลังโหลด…';
+
+  try {
+    const res = await fetch(API_STATS, {
+      method: 'GET',
+      headers: authHeaders(),
+    });
+
+    if (res.status === 401) { handle401(); return; }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('[Dashboard] stats error:', err);
+      if (lastUpdatedEl) lastUpdatedEl.textContent = `⚠️ โหลดข้อมูลไม่ได้ (${res.status})`;
+      return;
+    }
+
+    const data = await res.json();
+    // data = { total, available, held, occupied }
+
+    updateKpiCards(data);
+    updateChart(data);
+    updateLegend(data);
+
+    const now = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (lastUpdatedEl) lastUpdatedEl.textContent = `อัปเดตล่าสุด: ${now}  ·  Auto-refresh ทุก 30 วิ`;
+
+  } catch (err) {
+    console.error('[Dashboard] Network error:', err);
+    if (lastUpdatedEl) lastUpdatedEl.textContent = '🔌 เชื่อมต่อ Server ไม่ได้';
+  }
+}
+
+/* ── Build Chart.js doughnut (called once) ── */
+function buildChart(data) {
+  const canvas = getEl('stats-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  // Destroy old instance if re-initialising
+  if (_statsChart) { _statsChart.destroy(); _statsChart = null; }
+
+  const hasData = (data.total > 0);
+  _statsChart = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: ['ว่าง', 'จองแล้ว', 'มีรถจอด'],
+      datasets: [{
+        data: hasData
+          ? [data.available, data.held, data.occupied]
+          : [1, 0, 0],
+        backgroundColor: hasData
+          ? [CHART_COLORS.available, CHART_COLORS.held, CHART_COLORS.occupied]
+          : [CHART_COLORS.empty],
+        borderColor: '#111827',
+        borderWidth: 3,
+        hoverOffset: 8,
+      }],
+    },
+    options: {
+      cutout: '72%',
+      animation: { duration: 600, easing: 'easeInOutQuart' },
+      plugins: {
+        legend: { display: false },  // we render our own legend
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = total > 0 ? Math.round((ctx.parsed / total) * 100) : 0;
+              return ` ${ctx.label}: ${ctx.parsed} ช่อง (${pct}%)`;
+            },
+          },
+          backgroundColor: 'rgba(10,15,30,0.92)',
+          titleColor: '#fff',
+          bodyColor: 'rgba(255,255,255,0.75)',
+          borderColor: 'rgba(61,139,255,0.2)',
+          borderWidth: 1,
+          padding: 10,
+        },
+      },
+      responsive: true,
+      maintainAspectRatio: true,
+    },
+  });
+}
+
+/* ── Update existing chart with fresh data ── */
+function updateChart(data) {
+  if (!_statsChart) { buildChart(data); return; }
+
+  const hasData = (data.total > 0);
+  _statsChart.data.datasets[0].data = hasData
+    ? [data.available, data.held, data.occupied]
+    : [1, 0, 0];
+  _statsChart.data.datasets[0].backgroundColor = hasData
+    ? [CHART_COLORS.available, CHART_COLORS.held, CHART_COLORS.occupied]
+    : [CHART_COLORS.empty];
+  _statsChart.update('active');
+
+  // Update centre overlay
+  const usedPct = data.total > 0
+    ? Math.round(((data.held + data.occupied) / data.total) * 100)
+    : 0;
+  const centreEl = getEl('dash-centre-value');
+  if (centreEl) centreEl.textContent = `${usedPct}%`;
+}
+
+/* ── Update the 4 KPI cards ── */
+function updateKpiCards(data) {
+  const set = (id, val) => { const el = getEl(id); if (el) el.textContent = val; };
+  set('kpi-total',     data.total);
+  set('kpi-available', data.available);
+  set('kpi-held',      data.held);
+  set('kpi-occupied',  data.occupied);
+}
+
+/* ── Update legend percentage labels ── */
+function updateLegend(data) {
+  function pct(part) {
+    return data.total > 0 ? `${Math.round((part / data.total) * 100)}%` : '—%';
+  }
+  const setTxt = (id, val) => { const el = getEl(id); if (el) el.textContent = val; };
+  setTxt('legend-available-pct', pct(data.available));
+  setTxt('legend-held-pct',      pct(data.held));
+  setTxt('legend-occupied-pct',  pct(data.occupied));
+}
+
