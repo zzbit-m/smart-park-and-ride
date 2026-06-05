@@ -9,10 +9,12 @@
 **Core Goal:** Reduce time spent searching for parking, connect users to the Tram seamlessly, and collect data for resource management (Data-Driven Transit)
 
 **User Journey:**
-1. User opens web app, sees real-time slot map, taps a slot to hold it (15 min timer starts)
-2. On arrival: user shows QR Code at entry gate → slot status changes from "held" to "occupied"
-3. After parking: app shows parked slot location + nearest Tram schedule
-4. On exit: scan QR at exit gate → slot released back to "available"
+1. User opens web app, sees real-time slot map, taps an available slot
+2. **License plate modal appears** — user enters their vehicle registration before booking is confirmed
+3. Booking is created (15-min Redis countdown starts); user receives QR Code ticket showing slot + plate
+4. On arrival: user shows QR Code at entry gate → slot status changes from "held" to "occupied"
+5. After parking: app shows parked slot location + nearest Tram schedule
+6. On exit: scan QR at exit gate → slot released back to "available"
 
 **Key Business Rules:**
 - Hold duration: 15 minutes (TTL enforced in Redis)
@@ -41,7 +43,7 @@
 - `users` — id (UUID), phone, display_name, role (enum: user/admin/dispatcher), penalty_count, banned_until, created_at
 - `parking_zones` — id, name, tram_stop, total_slots
 - `parking_slots` — id, zone_id (FK), slot_code (e.g. "A-01"), last_known_status, updated_at
-- `bookings` — id (UUID), user_id (FK), slot_id (FK), status (enum: held/confirmed/completed/expired/no_show), qr_token, held_at, expires_at, checked_in_at, checked_out_at, flagged
+- `bookings` — id (UUID), user_id (FK), slot_id (FK), status (enum: held/confirmed/completed/expired/no_show), qr_token, **license_plate** (VARCHAR 20, nullable), held_at, expires_at, checked_in_at, checked_out_at, flagged
 - `penalty_events` — id, user_id (FK), booking_id (FK), reason, created_at
 - `trams` — id, tram_code, capacity, is_active
 - `tram_schedules` — id, tram_id (FK), zone_id (FK), departure, arrival
@@ -87,7 +89,7 @@
 
 **Slots router:** `backend/routers/slots.py`
 - `GET /slots/` — fetches all slots from PostgreSQL, batch-fetches live status from Redis, returns merged list
-- `POST /slots/{slot_id}/hold` — verifies slot exists, generates booking_id + qr_token (UUID placeholder, JWT in Phase 3), runs atomic Redis lock, writes booking to PostgreSQL with expires_at = now + 15min. Returns 409 if slot already taken.
+- `POST /slots/{slot_id}/hold` — accepts JSON body `{ license_plate }`, validates plate, runs atomic Redis lock, writes booking (with `license_plate`) to PostgreSQL with expires_at = now + 15min. Returns 409 if slot already taken, 422 if plate missing/invalid.
 - `DELETE /slots/{slot_id}/hold` — releases Redis key, marks booking as expired in PostgreSQL
 
 **Docker Compose (`docker-compose.yml`):**
@@ -153,11 +155,12 @@
 
 #### JS Architecture (`app.js`)
 
-- `USE_DEMO` flag: `window.location.protocol === 'file:'` — auto-activates when opened as a local file, bypassing all API calls (avoids CORS block)
-- `state` object: slots[], activeBooking, countdownTimer, parkedSlot
+- `state` object: slots[], activeBooking, countdownTimer, modalCountdownTimer, parkedSlot
 - `loadSlots()` → `renderParkingLot()` — full re-render on every refresh
-- `holdSlot()` — in demo mode, mutates state.slots directly and re-renders without API call
+- Slot click → `openPlateModal(slotId, slotCode)` — shows license plate input; on confirm calls `holdSlot(slotId, slotCode, plate)`
+- `holdSlot(slotId, slotCode, licensePlate)` — POSTs JSON body `{ license_plate }` to API, saves booking + plate to localStorage, opens ticket modal
 - `startCountdown()` — setInterval every 1s, clears itself on expiry
+- `reopenTicketFromStorage()` — restores active booking (including license plate) from localStorage on page reload
 - Auto-refresh: `setInterval(loadSlots, 30000)` every 30 seconds
 
 #### Design System (`style.css`)
@@ -178,7 +181,9 @@ parking/
 ├── project_state.md              ← this file
 ├── docker-compose.yml            ← spins up postgres + redis + backend
 ├── db/
-│   └── schema.sql                ← full PostgreSQL schema (all tables, enums, indexes)
+│   ├── schema.sql                ← full PostgreSQL schema (all tables, enums, indexes)
+│   └── migrations/
+│       └── 001_add_license_plate.sql  ← ALTER TABLE bookings ADD COLUMN license_plate
 ├── backend/
 │   ├── Dockerfile                ← python:3.11-slim, installs requirements
 │   ├── requirements.txt          ← fastapi, uvicorn, asyncpg, sqlalchemy, redis, python-jose
@@ -186,16 +191,49 @@ parking/
 │   ├── database.py               ← async SQLAlchemy engine + get_db() dependency
 │   ├── redis_client.py           ← Redis client, Lua lock script, slot helpers
 │   └── routers/
-│       └── slots.py              ← GET /slots/, POST /slots/{id}/hold, DELETE /slots/{id}/hold
+│       └── slots.py              ← GET /slots/, POST /slots/{id}/hold (with license_plate), DELETE /slots/{id}/hold
 └── frontend/
-    ├── index.html                ← 5 screens, all markup
-    ├── style.css                 ← full design system, parking lot styles
-    └── app.js                    ← state management, API calls, demo mode, rendering
+    ├── index.html                ← 5 screens + plate-modal + ticket-modal
+    ├── style.css                 ← full design system, parking lot styles, plate-modal CSS
+    └── app.js                    ← state management, plate modal logic, API calls, rendering
 ```
 
 ---
 
-## 5. Pending Tasks / Exact Next Steps
+## 5. Upgrade Branch — Enterprise Features
+
+### ✅ Completed
+
+| Feature | Status | Files Changed |
+|---|---|---|
+| Vehicle Verification (License Plate Registration) | ✅ Done | `db/schema.sql`, `db/migrations/001_add_license_plate.sql`, `backend/routers/slots.py`, `frontend/index.html`, `frontend/app.js`, `frontend/style.css` |
+
+#### Vehicle Verification — Implementation Detail
+
+**Goal:** Prevent unauthorized external users from occupying slots by requiring a vehicle registration number before any booking is confirmed.
+
+**How it works end-to-end:**
+
+1. User taps an available (green) slot
+2. `openPlateModal(slotId, slotCode)` is called — a premium modal pops up asking for ทะเบียนรถ
+3. The "ยืนยันการจอง ✓" button stays **disabled** until the user types at least one character; ≥ 21 chars shows a red hint and keeps it disabled
+4. On confirm (or Enter key), `holdSlot(slotId, slotCode, plate)` fires with `Content-Type: application/json` body `{ "license_plate": "PLATE" }`
+5. Backend `HoldRequest` Pydantic model validates → strip + uppercase normalisation → `422` if empty or > 20 chars
+6. `license_plate` is inserted into `bookings` alongside `qr_token` and `user_id`
+7. Booking ticket modal shows a **ทะเบียนรถ** row so the user can verify their plate
+8. Plate is also stored in `localStorage` with the booking so it survives page reload
+
+**Database change:**
+```sql
+-- db/migrations/001_add_license_plate.sql
+ALTER TABLE bookings
+    ADD COLUMN IF NOT EXISTS license_plate VARCHAR(20);
+```
+> For fresh containers, `schema.sql` already includes the column — no migration needed.
+
+---
+
+## 6. Pending Tasks / Exact Next Steps
 
 ### Phase 4 — Admin Dashboard & Tram Analytics
 
@@ -237,8 +275,9 @@ parking/
 
 ### Known TODOs / Technical Debt
 
+- ~~License plate not collected during booking~~ → **Fixed in Upgrade Branch** ✅
 - `user_id` in `POST /slots/{id}/hold` is hardcoded to a placeholder UUID — real auth (phone-based login + JWT) not yet implemented
-- QR code is a visual placeholder — needs real QR generation (use `qrcode.js` CDN on frontend)
+- QR code uses external `api.qrserver.com` — consider self-hosted `qrcode.js` CDN for offline support
 - Background worker (expiry sweep + penalty calculation) is designed but not yet coded — needs to be added to `main.py` as an asyncio background task
 - `parking_slots` table is empty — needs seed data (INSERT 20 slots into zone 1)
 - `last_known_status` on `parking_slots` is not being updated on hold/release — only Redis holds live state; recovery path not yet implemented

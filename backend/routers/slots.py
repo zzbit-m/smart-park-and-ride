@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from routers.admin import verify_admin_token
 from redis_client import (
     HOLD_TTL_SECONDS,
     delete_qr_token_lookup,
@@ -32,6 +33,10 @@ class SlotOut(BaseModel):
     slot_code: str
     zone_id: int
     live_status: str
+
+
+class HoldRequest(BaseModel):
+    license_plate: str
 
 
 class HoldResponse(BaseModel):
@@ -104,8 +109,8 @@ class AnalyticsResponse(BaseModel):
 
 
 SEED_SLOTS = (
-    [("Zone A", "Tram Stop A", f"A{i}") for i in range(1, 11)]
-    + [("Zone B", "Tram Stop B", f"B{i}") for i in range(1, 11)]
+    [("Zone A", "Tram Stop A", f"A{i:02d}") for i in range(1, 11)]
+    + [("Zone B", "Tram Stop B", f"B{i:02d}") for i in range(1, 11)]
 )
 
 
@@ -315,8 +320,14 @@ def _merge_live_status(redis_status: str, pg_status: str) -> str:
 
 
 @router.post("/scan", response_model=ScanResponse)
-async def scan_in(request: ScanRequest, db: AsyncSession = Depends(get_db)):
-    """Gate entry: validate QR token via Redis, mark slot occupied in PostgreSQL."""
+async def scan_in(
+    request: ScanRequest,
+    _: str = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Gate entry: validate QR token via Redis, mark slot occupied in PostgreSQL.
+    Requires a valid admin Bearer token in the Authorization header.
+    """
     qr_token = request.qr_token.strip()
     if not qr_token:
         raise HTTPException(status_code=400, detail="Invalid or expired QR code")
@@ -354,8 +365,14 @@ async def scan_in(request: ScanRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/scan-out", response_model=ScanOutResponse)
-async def scan_out(request: ScanRequest, db: AsyncSession = Depends(get_db)):
-    """Gate exit: validate QR token, mark booking completed, free the slot."""
+async def scan_out(
+    request: ScanRequest,
+    _: str = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Gate exit: validate QR token, mark booking completed, free the slot.
+    Requires a valid admin Bearer token in the Authorization header.
+    """
     qr_token = request.qr_token.strip()
     if not qr_token:
         raise HTTPException(status_code=400, detail="QR token is required")
@@ -430,10 +447,15 @@ async def scan_out(request: ScanRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/manual-release", response_model=ManualReleaseResponse)
-async def manual_release(request: ManualReleaseRequest, db: AsyncSession = Depends(get_db)):
+async def manual_release(
+    request: ManualReleaseRequest,
+    _: str = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Admin override: force-release a slot by slot_code regardless of QR token.
     Used when a driver leaves without scanning out (forgotten checkout).
+    Requires a valid admin Bearer token in the Authorization header.
     Marks the booking as completed and frees the slot in both Redis and PostgreSQL.
     """
     slot_code = request.slot_code.strip().upper()
@@ -511,8 +533,23 @@ async def manual_release(request: ManualReleaseRequest, db: AsyncSession = Depen
 
 
 @router.post("/{slot_id}/hold", response_model=HoldResponse)
-async def hold_slot_endpoint(slot_id: int, db: AsyncSession = Depends(get_db)):
-    """Hold a slot for 15 minutes (atomic Redis lock + PostgreSQL booking row)."""
+async def hold_slot_endpoint(
+    slot_id: int,
+    body: HoldRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Hold a slot for 15 minutes (atomic Redis lock + PostgreSQL booking row).
+
+    The request body must include a ``license_plate`` string so the booking can
+    be linked to a specific vehicle for access-control purposes.
+    """
+    # ── Validate license plate ──────────────────────────────────────────────
+    plate = body.license_plate.strip().upper()
+    if not plate:
+        raise HTTPException(status_code=422, detail="license_plate is required")
+    if len(plate) > 20:
+        raise HTTPException(status_code=422, detail="license_plate must be 20 characters or fewer")
+
     result = await db.execute(
         text("SELECT id, slot_code FROM parking_slots WHERE id = :sid"),
         {"sid": slot_id},
@@ -539,14 +576,17 @@ async def hold_slot_endpoint(slot_id: int, db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(
             text("""
-                INSERT INTO bookings (id, user_id, slot_id, status, qr_token, held_at, expires_at)
-                VALUES (:id, :user_id, :slot_id, 'held', :qr_token, now(), :expires_at)
+                INSERT INTO bookings
+                    (id, user_id, slot_id, status, qr_token, license_plate, held_at, expires_at)
+                VALUES
+                    (:id, :user_id, :slot_id, 'held', :qr_token, :license_plate, now(), :expires_at)
             """),
             {
                 "id": booking_id,
                 "user_id": PLACEHOLDER_USER_ID,
                 "slot_id": slot_id,
                 "qr_token": qr_token,
+                "license_plate": plate,
                 "expires_at": expires_at,
             },
         )

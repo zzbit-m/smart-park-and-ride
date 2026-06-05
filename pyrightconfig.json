@@ -1,0 +1,9 @@
+{
+  "include": ["backend"],
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportMissingModuleSource": "none",
+  "reportMissingImports": "none",
+  "venvPath": ".",
+  "pythonVersion": "3.11"
+}

@@ -12,7 +12,62 @@
 </head>
 <body class="admin-body">
 
-  <div class="admin-wrapper">
+  <!-- ── LOGIN MODAL OVERLAY (shown until authenticated) ── -->
+  <div id="login-overlay" class="login-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
+    <div class="login-card">
+
+      <div class="login-logo-row">
+        <span class="login-logo">P<span class="accent">&</span>R</span>
+        <span class="login-role-badge">ADMIN</span>
+      </div>
+
+      <h1 id="login-title" class="login-title">Staff Login</h1>
+      <p class="login-sub">กรอกข้อมูลเพื่อเข้าสู่ระบบ Gate Scanner</p>
+
+      <form id="login-form" class="login-form" autocomplete="off" novalidate>
+
+        <div class="login-field">
+          <label for="login-username" class="login-label">USERNAME</label>
+          <input
+            id="login-username"
+            type="text"
+            class="login-input"
+            placeholder="admin"
+            autocomplete="username"
+            spellcheck="false"
+            required
+          />
+        </div>
+
+        <div class="login-field">
+          <label for="login-password" class="login-label">PASSWORD</label>
+          <div class="login-pw-wrap">
+            <input
+              id="login-password"
+              type="password"
+              class="login-input"
+              placeholder="••••••••••"
+              autocomplete="current-password"
+              required
+            />
+            <button type="button" id="toggle-pw" class="toggle-pw-btn" aria-label="Show/hide password">👁</button>
+          </div>
+        </div>
+
+        <p id="login-error" class="login-error" role="alert" aria-live="polite"></p>
+
+        <button type="submit" id="login-btn" class="login-btn">
+          <span id="login-btn-text">เข้าสู่ระบบ →</span>
+        </button>
+
+      </form>
+
+      <p class="login-hint">Smart Park &amp; Ride — Staff Interface v1.0</p>
+    </div>
+  </div>
+
+  <!-- ── MAIN DASHBOARD (hidden until login) ── -->
+  <div id="admin-dashboard" class="admin-wrapper" hidden>
 
     <!-- ── HEADER ── -->
     <header class="admin-header">
@@ -24,6 +79,8 @@
         <h1 class="admin-title">Admin Panel</h1>
         <p class="admin-subtitle">Gate Scanner — เปิดไม้กั้น</p>
       </div>
+      <!-- Logout button -->
+      <button id="logout-btn" class="admin-logout-btn" title="ออกจากระบบ">🔒 Logout</button>
       <!-- Animated accent line -->
       <div class="admin-header-glow"></div>
     </header>
