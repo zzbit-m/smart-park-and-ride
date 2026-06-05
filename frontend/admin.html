@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <!-- html5-qrcode — camera QR scanner -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body class="admin-body">
 
@@ -95,7 +97,61 @@
         <span class="status-endpoint">POST /api/slots/scan &amp; /scan-out</span>
       </div>
 
-      <!-- Scanner card -->
+      <!-- ── Camera QR Scanner card ── -->
+      <div class="admin-card camera-card" id="camera-card">
+
+        <div class="camera-card-header">
+          <div class="camera-card-title-row">
+            <span class="camera-icon">📷</span>
+            <div>
+              <p class="camera-title">Camera Scanner</p>
+              <p class="camera-sub">สแกน QR Code ผ่านกล้อง</p>
+            </div>
+          </div>
+          <!-- Start / Stop button -->
+          <button id="camera-toggle-btn" class="btn-camera-toggle" aria-label="Toggle camera">
+            <span class="btn-camera-icon">▶</span>
+            <span id="camera-toggle-text">เปิดกล้อง</span>
+          </button>
+        </div>
+
+        <!-- Viewfinder: html5-qrcode mounts the video inside #qr-reader -->
+        <div class="camera-viewfinder" id="qr-reader-wrap" hidden>
+          <div id="qr-reader"></div>
+          <!-- Red laser sweep overlay -->
+          <div class="camera-laser" id="camera-laser"></div>
+        </div>
+
+        <!-- Decoded token preview (shown after a successful scan) -->
+        <div class="camera-decoded" id="camera-decoded" hidden>
+          <div class="camera-decoded-inner">
+            <span class="camera-decoded-icon">✅</span>
+            <div class="camera-decoded-body">
+              <span class="camera-decoded-label">QR DECODED</span>
+              <span class="camera-decoded-token" id="camera-decoded-token">—</span>
+            </div>
+          </div>
+          <!-- Immediate action row once decoded -->
+          <div class="camera-action-row">
+            <button id="cam-scan-in-btn" class="btn-scan btn-scan-in btn-cam-action">
+              <span class="btn-scan-icon">🚧</span>
+              <span class="btn-scan-text">Scan In</span>
+            </button>
+            <button id="cam-scan-out-btn" class="btn-scan btn-scan-out btn-cam-action">
+              <span class="btn-scan-icon">🚗</span>
+              <span class="btn-scan-text">Scan Out</span>
+            </button>
+            <button id="cam-rescan-btn" class="btn-cam-rescan" title="Scan again">
+              🔄 Rescan
+            </button>
+          </div>
+        </div>
+
+        <p class="camera-hint" id="camera-hint">กด <strong>เปิดกล้อง</strong> แล้วชี้ QR Code เข้าหากล้อง</p>
+
+      </div>
+
+      <!-- Scanner card (manual fallback) -->
       <div class="admin-card scanner-card">
         <div class="scanner-icon-wrap">
           <div class="scanner-icon">
@@ -105,8 +161,8 @@
           </div>
         </div>
 
-        <h2 class="scanner-card-title">สแกน QR Token</h2>
-        <p class="scanner-card-sub">ใส่ Token จาก QR Code ของผู้ใช้<br>เพื่อเปิดไม้กั้นเข้า หรือ บันทึกรถออก</p>
+        <h2 class="scanner-card-title">สแกน QR Token (Manual)</h2>
+        <p class="scanner-card-sub">วาง Token จาก QR Code ของผู้ใช้<br>หรือใช้ USB barcode reader เป็น fallback</p>
 
         <div class="scan-form">
           <div class="input-group">
@@ -117,7 +173,7 @@
                 id="qr-input"
                 type="text"
                 class="scan-input"
-                placeholder="Scan or Paste QR Token here"
+                placeholder="Paste or scan QR token here…"
                 autocomplete="off"
                 spellcheck="false"
               />

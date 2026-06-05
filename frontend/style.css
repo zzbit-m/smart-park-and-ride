@@ -2035,3 +2035,239 @@ header::after {
   color: rgba(255,255,255,0.3);
   border-color: rgba(255,255,255,0.1);
 }
+
+/* ════════════════════════════════════════════════════════
+   CAMERA QR SCANNER CARD
+   admin.html — camera-card + viewfinder + decoded panel
+════════════════════════════════════════════════════════ */
+
+/* ── Card layout ── */
+.camera-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.camera-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.camera-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.camera-icon {
+  font-size: 26px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.camera-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.camera-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ── Toggle button ── */
+.btn-camera-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  background: rgba(61, 139, 255, 0.1);
+  color: var(--accent);
+  border: 1.5px solid rgba(61, 139, 255, 0.3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-th);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-camera-toggle:hover {
+  background: rgba(61, 139, 255, 0.18);
+  border-color: var(--accent);
+}
+
+/* Active = camera is ON → green */
+.btn-camera-toggle--active {
+  background: rgba(0, 229, 160, 0.12) !important;
+  color: var(--green) !important;
+  border-color: rgba(0, 229, 160, 0.4) !important;
+}
+
+.btn-camera-toggle--active:hover {
+  background: rgba(0, 229, 160, 0.2) !important;
+}
+
+.btn-camera-icon {
+  font-size: 16px;
+}
+
+/* ── Video viewfinder ── */
+.camera-viewfinder {
+  position: relative;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #000;
+  border: 2px solid rgba(61, 139, 255, 0.2);
+  /* html5-qrcode injects its own elements — let it control height */
+}
+
+/* Override html5-qrcode default inline styles to match dark theme */
+#qr-reader {
+  border: none !important;
+  background: #000 !important;
+  width: 100% !important;
+}
+
+#qr-reader video {
+  border-radius: calc(var(--radius-sm) - 2px);
+}
+
+/* Remove the library's own border/background on the scan region */
+#qr-reader__scan_region {
+  background: transparent !important;
+}
+
+/* ── Laser sweep overlay ── */
+.camera-laser {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, var(--red) 50%, transparent 100%);
+  opacity: 0;
+  pointer-events: none;
+  border-radius: 2px;
+  filter: blur(1px);
+  box-shadow: 0 0 8px var(--red);
+}
+
+.camera-laser--active {
+  opacity: 1;
+  animation: laserSweep 2.2s ease-in-out infinite;
+}
+
+@keyframes laserSweep {
+  0%   { top: 5%;  opacity: 0.9; }
+  50%  { top: 90%; opacity: 1;   }
+  100% { top: 5%;  opacity: 0.9; }
+}
+
+/* ── Decoded token preview ── */
+.camera-decoded {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: rgba(0, 229, 160, 0.06);
+  border: 1.5px solid rgba(0, 229, 160, 0.25);
+  border-radius: var(--radius-sm);
+  animation: cameraDecodeIn 0.25s ease;
+}
+
+@keyframes cameraDecodeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.camera-decoded-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.camera-decoded-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.camera-decoded-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.camera-decoded-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 2.5px;
+  color: var(--green);
+  text-transform: uppercase;
+}
+
+.camera-decoded-token {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Camera action row (Scan In / Scan Out / Rescan) ── */
+.camera-action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-cam-action {
+  padding: 12px 8px !important;   /* slightly tighter than full-width variant */
+  font-size: 13px !important;
+}
+
+.btn-cam-rescan {
+  padding: 12px 14px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-th);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-cam-rescan:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+/* ── Hint text ── */
+.camera-hint {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Green flash on successful decode ── */
+.camera-card--flash {
+  animation: cameraFlash 0.6s ease;
+}
+
+@keyframes cameraFlash {
+  0%   { box-shadow: 0 0  0   rgba(0, 229, 160, 0);   }
+  30%  { box-shadow: 0 0 28px rgba(0, 229, 160, 0.45); }
+  100% { box-shadow: 0 0  0   rgba(0, 229, 160, 0);   }
+}
+

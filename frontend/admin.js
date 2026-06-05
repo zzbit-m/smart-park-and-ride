@@ -396,4 +396,217 @@ window.addEventListener('DOMContentLoaded', () => {
   /* ── Init clear button state ── */
   getEl('clear-btn').style.opacity = '0';
   getEl('clear-btn').style.pointerEvents = 'none';
+
+  /* ── Camera scanner wiring ── */
+  initCameraScanner();
 });
+
+/* ══════════════════════════════════════════════════════
+   CAMERA QR SCANNER  (html5-qrcode v2)
+   - Toggle open/close camera with one button
+   - On successful decode → show decoded panel, stop scanning
+   - Admin chooses Scan-In or Scan-Out from decoded panel
+   - Rescan button restarts the reader for next ticket
+══════════════════════════════════════════════════════ */
+
+let _html5QrCode = null;  // singleton scanner instance
+let _cameraActive = false;
+let _lastDecodedToken = '';
+
+const CAMERA_CONFIG = {
+  fps: 10,
+  qrbox: { width: 240, height: 240 },
+  aspectRatio: 1.0,
+  showTorchButtonIfSupported: true,
+  showZoomSliderIfSupported: true,
+};
+
+function initCameraScanner() {
+  const toggleBtn     = getEl('camera-toggle-btn');
+  const camScanInBtn  = getEl('cam-scan-in-btn');
+  const camScanOutBtn = getEl('cam-scan-out-btn');
+  const camRescanBtn  = getEl('cam-rescan-btn');
+
+  if (!toggleBtn) return; // camera card not in DOM
+
+  toggleBtn.addEventListener('click', () => {
+    if (_cameraActive) {
+      stopCamera();
+    } else {
+      startCamera();
+    }
+  });
+
+  if (camScanInBtn)  camScanInBtn.addEventListener('click',  () => handleCameraAction('in'));
+  if (camScanOutBtn) camScanOutBtn.addEventListener('click', () => handleCameraAction('out'));
+  if (camRescanBtn)  camRescanBtn.addEventListener('click',  resumeCamera);
+}
+
+/* ── Start camera ── */
+async function startCamera() {
+  const readerWrap   = getEl('qr-reader-wrap');
+  const toggleBtn    = getEl('camera-toggle-btn');
+  const toggleText   = getEl('camera-toggle-text');
+  const laser        = getEl('camera-laser');
+  const hint         = getEl('camera-hint');
+  const decodedPanel = getEl('camera-decoded');
+  const cameraCard   = getEl('camera-card');
+
+  // Reset decoded panel
+  decodedPanel.hidden = true;
+  _lastDecodedToken = '';
+
+  // Show viewfinder
+  readerWrap.hidden = false;
+
+  // Update toggle button → "Stop"
+  toggleBtn.classList.add('btn-camera-toggle--active');
+  toggleText.textContent = 'ปิดกล้อง';
+  toggleBtn.querySelector('.btn-camera-icon').textContent = '⏹';
+  if (hint) hint.textContent = 'กำลังสแกน… ชี้ QR Code เข้าหากล้อง';
+
+  // Laser on
+  if (laser) laser.classList.add('camera-laser--active');
+
+  try {
+    _html5QrCode = new Html5Qrcode('qr-reader');
+    await _html5QrCode.start(
+      { facingMode: 'environment' },
+      CAMERA_CONFIG,
+      onQrDecodeSuccess,
+      /* onScanFailure */ () => { /* silent — fires every frame */ }
+    );
+    _cameraActive = true;
+
+    // Flash the card border green briefly on start
+    cameraCard.style.transition = 'border-color 0.3s';
+    cameraCard.style.borderColor = 'rgba(0,229,160,0.5)';
+    setTimeout(() => { cameraCard.style.borderColor = ''; }, 800);
+
+  } catch (err) {
+    console.error('[Camera] start error:', err);
+    readerWrap.hidden = true;
+    laser.classList.remove('camera-laser--active');
+    toggleBtn.classList.remove('btn-camera-toggle--active');
+    toggleText.textContent = 'เปิดกล้อง';
+    toggleBtn.querySelector('.btn-camera-icon').textContent = '▶';
+    if (hint) hint.textContent = '⚠️ ไม่สามารถเข้าถึงกล้องได้ — ตรวจสอบสิทธิ์ใน Browser';
+    _cameraActive = false;
+  }
+}
+
+/* ── Stop camera completely ── */
+async function stopCamera() {
+  const readerWrap = getEl('qr-reader-wrap');
+  const laser      = getEl('camera-laser');
+  const toggleBtn  = getEl('camera-toggle-btn');
+  const toggleText = getEl('camera-toggle-text');
+  const hint       = getEl('camera-hint');
+
+  if (_html5QrCode) {
+    try {
+      await _html5QrCode.stop();
+      _html5QrCode.clear();
+    } catch (_) { /* ignore if already stopped */ }
+    _html5QrCode = null;
+  }
+
+  _cameraActive = false;
+  readerWrap.hidden = true;
+  laser.classList.remove('camera-laser--active');
+  toggleBtn.classList.remove('btn-camera-toggle--active');
+  toggleText.textContent = 'เปิดกล้อง';
+  toggleBtn.querySelector('.btn-camera-icon').textContent = '▶';
+  if (hint) hint.textContent = 'กด เปิดกล้อง แล้วชี้ QR Code เข้าหากล้อง';
+}
+
+/* ── Resume camera after an action (Rescan) ── */
+async function resumeCamera() {
+  const decodedPanel = getEl('camera-decoded');
+  decodedPanel.hidden = true;
+  _lastDecodedToken = '';
+  // Clear the decoded token display
+  const tokenEl = getEl('camera-decoded-token');
+  if (tokenEl) tokenEl.textContent = '—';
+
+  // Restart — stop first if somehow still running
+  await stopCamera();
+  await startCamera();
+}
+
+/* ── Called by html5-qrcode on every successful decode ── */
+function onQrDecodeSuccess(decodedText) {
+  const token = decodedText.trim();
+  if (!token) return;
+  if (token === _lastDecodedToken) return; // deduplicate rapid fires
+
+  _lastDecodedToken = token;
+
+  // Pause scanning (keep camera alive but ignore further results)
+  if (_html5QrCode) {
+    _html5QrCode.pause(/* shouldPauseVideo= */ false);
+  }
+
+  // Stop laser animation while awaiting admin action
+  const laser = getEl('camera-laser');
+  if (laser) laser.classList.remove('camera-laser--active');
+
+  // Populate the decoded panel
+  const tokenEl = getEl('camera-decoded-token');
+  if (tokenEl) {
+    const short = token.length > 24
+      ? token.slice(0, 10) + '…' + token.slice(-8)
+      : token;
+    tokenEl.textContent = short;
+    tokenEl.title = token;
+  }
+
+  // Also populate the manual fallback input (enables Enter-to-scan flow)
+  const qrInput = getEl('qr-input');
+  if (qrInput) {
+    qrInput.value = token;
+    // Trigger the input event so the clear button appears
+    qrInput.dispatchEvent(new Event('input'));
+  }
+
+  // Show the decoded action panel
+  getEl('camera-decoded').hidden = false;
+
+  // Flash the camera card
+  const cameraCard = getEl('camera-card');
+  if (cameraCard) {
+    cameraCard.classList.add('camera-card--flash');
+    setTimeout(() => cameraCard.classList.remove('camera-card--flash'), 700);
+  }
+
+  const hint = getEl('camera-hint');
+  if (hint) hint.textContent = '✅ QR พบแล้ว — เลือก Scan In หรือ Scan Out';
+}
+
+/* ── Handle Scan-In or Scan-Out from the decoded panel ── */
+async function handleCameraAction(mode) {
+  const token = _lastDecodedToken;
+  if (!token) return;
+
+  const inBtn  = getEl('cam-scan-in-btn');
+  const outBtn = getEl('cam-scan-out-btn');
+
+  // Disable both camera action buttons during request
+  if (inBtn)  inBtn.disabled  = true;
+  if (outBtn) outBtn.disabled = true;
+
+  const apiUrl      = mode === 'in' ? API_SCAN_IN : API_SCAN_OUT;
+  const defaultLbl  = mode === 'in' ? 'เปิดไม้กั้น (Scan In)' : 'สแกนรถออก (Scan Out)';
+  const manualBtn   = getEl(mode === 'in' ? 'scan-btn' : 'scan-out-btn');
+
+  await doScan(apiUrl, token, manualBtn, defaultLbl, mode);
+
+  // Re-enable cam buttons
+  if (inBtn)  inBtn.disabled  = false;
+  if (outBtn) outBtn.disabled = false;
+
+  // After a successful action, stop the camera so staff can prepare next scan
+  await stopCamera();
+  getEl('camera-decoded').hidden = true;
+  _lastDecodedToken = '';
+}
