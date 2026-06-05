@@ -18,6 +18,9 @@
 
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Ensure the HTML `hidden` attribute always wins over any class-level display rule */
+[hidden] { display: none !important; }
+
 
 html, body {
   height: 100%;
