@@ -1,8 +1,19 @@
+import asyncio
 from contextlib import asynccontextmanager
+import logging
 import os
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 from fastapi import FastAPI, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from database import check_postgres, check_redis, close_connections, init_connections
 from auto_seed import auto_seed
@@ -23,12 +34,26 @@ ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.st
 
 
 
+from expiry_worker import run_expiry_worker
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_connections()
     await auto_seed()   # no-op when parking_slots already has rows
-    yield
-    await close_connections()
+    
+    # Start background worker task
+    worker_task = asyncio.create_task(run_expiry_worker())
+    
+    try:
+        yield
+    finally:
+        # Cancel and wait for background worker
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
+        await close_connections()
 
 
 app = FastAPI(
@@ -36,6 +61,38 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    errors = exc.errors()
+    error_messages = []
+    for err in errors:
+        loc = " -> ".join(str(l) for l in err.get("loc", []))
+        msg = err.get("msg", "Invalid value")
+        error_messages.append(f"{loc}: {msg}")
+    detail_msg = "; ".join(error_messages)
+    
+    logger.warning(f"Validation error on {request.method} {request.url.path}: {detail_msg}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": f"Validation error: {detail_msg}"}
+    )
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc: StarletteHTTPException):
+    logger.warning(f"HTTP error on {request.method} {request.url.path}: status_code={exc.status_code}, detail={exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Please try again later."}
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,3 +138,5 @@ async def health(response: Response):
         "postgres": {"ok": postgres_ok, "error": postgres_error},
         "redis": {"ok": redis_ok, "error": redis_error},
     }
+
+

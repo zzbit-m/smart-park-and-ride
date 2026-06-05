@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -9,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from routers.admin import verify_admin_token
+
+logger = logging.getLogger(__name__)
 from redis_client import (
     HOLD_TTL_SECONDS,
     delete_qr_token_lookup,
@@ -333,32 +336,39 @@ async def scan_in(
     """
     qr_token = request.qr_token.strip()
     if not qr_token:
+        logger.warning("Scan-in attempted with empty QR token")
         raise HTTPException(status_code=400, detail="Invalid or expired QR code")
 
     slot_id = await get_slot_id_by_qr_token(qr_token)
     if slot_id is None:
+        logger.warning(f"Scan-in failed: invalid or expired QR token '{qr_token}'")
         raise HTTPException(status_code=400, detail="Invalid or expired QR code")
 
     await delete_qr_token_lookup(qr_token)
     await delete_slot_hold(slot_id)
 
-    await db.execute(
-        text("""
-            UPDATE parking_slots
-            SET last_known_status = 'occupied', updated_at = now()
-            WHERE id = :sid
-        """),
-        {"sid": slot_id},
-    )
-    await db.execute(
-        text("""
-            UPDATE bookings
-            SET status = 'confirmed', checked_in_at = now()
-            WHERE qr_token = :qr_token AND status = 'held'
-        """),
-        {"qr_token": qr_token},
-    )
-    await db.commit()
+    try:
+        await db.execute(
+            text("""
+                UPDATE parking_slots
+                SET last_known_status = 'occupied', updated_at = now()
+                WHERE id = :sid
+            """),
+            {"sid": slot_id},
+        )
+        await db.execute(
+            text("""
+                UPDATE bookings
+                SET status = 'confirmed', checked_in_at = now()
+                WHERE qr_token = :qr_token AND status = 'held'
+            """),
+            {"qr_token": qr_token},
+        )
+        await db.commit()
+        logger.info(f"Scan-in successful: gate opened for slot_id={slot_id}, qr_token={qr_token}")
+    except Exception as e:
+        logger.error(f"Error during scan-in database updates for slot_id={slot_id}: {e}", exc_info=True)
+        raise
 
     return ScanResponse(
         status="success",
@@ -378,6 +388,7 @@ async def scan_out(
     """
     qr_token = request.qr_token.strip()
     if not qr_token:
+        logger.warning("Scan-out failed: QR token is required")
         raise HTTPException(status_code=400, detail="QR token is required")
 
     # Look up the booking by qr_token — accept both confirmed (scanned-in) and held states
@@ -402,10 +413,12 @@ async def scan_out(
         )
         existing = exists.fetchone()
         if existing:
+            logger.warning(f"Scan-out failed: booking already {existing.status} for qr_token='{qr_token}'")
             raise HTTPException(
                 status_code=400,
                 detail=f"Booking already {existing.status} — cannot scan out again",
             )
+        logger.warning(f"Scan-out failed: QR token not found or already expired for qr_token='{qr_token}'")
         raise HTTPException(status_code=404, detail="QR token not found or already expired")
 
     booking_id = row.id
@@ -418,27 +431,32 @@ async def scan_out(
     # Clean up any leftover QR token lookup key (defensive)
     await delete_qr_token_lookup(qr_token)
 
-    # Mark booking completed + record checkout time
-    await db.execute(
-        text("""
-            UPDATE bookings
-            SET status = 'completed', checked_out_at = now()
-            WHERE id = :bid
-        """),
-        {"bid": booking_id},
-    )
+    try:
+        # Mark booking completed + record checkout time
+        await db.execute(
+            text("""
+                UPDATE bookings
+                SET status = 'completed', checked_out_at = now()
+                WHERE id = :bid
+            """),
+            {"bid": booking_id},
+        )
 
-    # Sync parking_slots persistent status
-    await db.execute(
-        text("""
-            UPDATE parking_slots
-            SET last_known_status = 'available', updated_at = now()
-            WHERE id = :sid
-        """),
-        {"sid": slot_id},
-    )
+        # Sync parking_slots persistent status
+        await db.execute(
+            text("""
+                UPDATE parking_slots
+                SET last_known_status = 'available', updated_at = now()
+                WHERE id = :sid
+            """),
+            {"sid": slot_id},
+        )
 
-    await db.commit()
+        await db.commit()
+        logger.info(f"Scan-out successful: slot {slot_code} (id={slot_id}) released, booking {booking_id} completed.")
+    except Exception as e:
+        logger.error(f"Error during scan-out database updates for booking {booking_id}: {e}", exc_info=True)
+        raise
 
     return ScanOutResponse(
         status="success",
@@ -463,6 +481,7 @@ async def manual_release(
     """
     slot_code = request.slot_code.strip().upper()
     if not slot_code:
+        logger.warning("Manual release failed: slot_code is required")
         raise HTTPException(status_code=400, detail="slot_code is required")
 
     # Resolve slot_code → slot_id and find any active booking in one query
@@ -487,12 +506,14 @@ async def manual_release(
     row = result.fetchone()
 
     if not row:
+        logger.warning(f"Manual release failed: Slot '{slot_code}' not found")
         raise HTTPException(status_code=404, detail=f"Slot '{slot_code}' not found")
 
     slot_id    = row.slot_id
     booking_id = row.booking_id
 
     if not booking_id:
+        logger.warning(f"Manual release failed: Slot '{slot_code}' has no active booking")
         raise HTTPException(
             status_code=404,
             detail=f"Slot '{slot_code}' has no active booking — it may already be available",
@@ -505,27 +526,32 @@ async def manual_release(
     if row.qr_token:
         await delete_qr_token_lookup(row.qr_token)
 
-    # ── Mark booking completed ──
-    await db.execute(
-        text("""
-            UPDATE bookings
-            SET status = 'completed', checked_out_at = now()
-            WHERE id = :bid
-        """),
-        {"bid": booking_id},
-    )
+    try:
+        # ── Mark booking completed ──
+        await db.execute(
+            text("""
+                UPDATE bookings
+                SET status = 'completed', checked_out_at = now()
+                WHERE id = :bid
+            """),
+            {"bid": booking_id},
+        )
 
-    # ── Sync persistent slot status ──
-    await db.execute(
-        text("""
-            UPDATE parking_slots
-            SET last_known_status = 'available', updated_at = now()
-            WHERE id = :sid
-        """),
-        {"sid": slot_id},
-    )
+        # ── Sync persistent slot status ──
+        await db.execute(
+            text("""
+                UPDATE parking_slots
+                SET last_known_status = 'available', updated_at = now()
+                WHERE id = :sid
+            """),
+            {"sid": slot_id},
+        )
 
-    await db.commit()
+        await db.commit()
+        logger.info(f"Manual release successful: Slot {slot_code} (id={slot_id}) force-released, booking {booking_id} marked completed.")
+    except Exception as e:
+        logger.error(f"Error during manual release database updates for slot {slot_code}: {e}", exc_info=True)
+        raise
 
     return ManualReleaseResponse(
         status="success",
@@ -549,8 +575,10 @@ async def hold_slot_endpoint(
     # ── Validate license plate ──────────────────────────────────────────────
     plate = body.license_plate.strip().upper()
     if not plate:
+        logger.warning(f"Hold booking failed: license_plate missing for slot_id={slot_id}")
         raise HTTPException(status_code=422, detail="license_plate is required")
     if len(plate) > 20:
+        logger.warning(f"Hold booking failed: license_plate too long ('{plate}') for slot_id={slot_id}")
         raise HTTPException(status_code=422, detail="license_plate must be 20 characters or fewer")
 
     result = await db.execute(
@@ -559,6 +587,7 @@ async def hold_slot_endpoint(
     )
     slot = result.fetchone()
     if not slot:
+        logger.warning(f"Hold booking failed: slot_id={slot_id} not found")
         raise HTTPException(status_code=404, detail="Slot not found")
 
     booking_id = str(uuid.uuid4())
@@ -571,6 +600,7 @@ async def hold_slot_endpoint(
         ttl_seconds=HOLD_TTL_SECONDS,
     )
     if not acquired:
+        logger.warning(f"Hold booking failed: slot_id={slot_id} is already held or occupied")
         raise HTTPException(
             status_code=400,
             detail="Slot is already held or occupied",
@@ -594,11 +624,13 @@ async def hold_slot_endpoint(
             },
         )
         await db.commit()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to create hold booking in database: slot_id={slot_id}, booking_id={booking_id}. Error: {e}", exc_info=True)
         await release_slot(slot_id)
         raise
 
     await set_qr_token_lookup(qr_token, slot_id, ttl_seconds=HOLD_TTL_SECONDS)
+    logger.info(f"Created hold booking: booking_id={booking_id}, slot_id={slot_id}, license_plate='{plate}', expires_at='{expires_at.isoformat()}'")
 
     return HoldResponse(
         booking_id=booking_id,
@@ -626,13 +658,18 @@ async def release_hold(slot_id: int, db: AsyncSession = Depends(get_db)):
     if token_result:
         await delete_qr_token_lookup(token_result.qr_token)
 
-    await db.execute(
-        text("""
-            UPDATE bookings SET status = 'expired'
-            WHERE slot_id = :sid AND status = 'held'
-        """),
-        {"sid": slot_id},
-    )
-    await db.commit()
+    try:
+        await db.execute(
+            text("""
+                UPDATE bookings SET status = 'expired'
+                WHERE slot_id = :sid AND status = 'held'
+            """),
+            {"sid": slot_id},
+        )
+        await db.commit()
+        logger.info(f"Cancelled hold successfully for slot_id={slot_id}.")
+    except Exception as e:
+        logger.error(f"Error during release_hold database updates for slot_id={slot_id}: {e}", exc_info=True)
+        raise
 
     return {"message": f"Slot {slot_id} released successfully"}

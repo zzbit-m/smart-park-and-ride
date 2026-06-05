@@ -59,10 +59,11 @@
 - Values: `"available"` | `"held:{booking_id}"` (TTL=900s) | `"occupied:{booking_id}"` (no TTL)
 - Atomic hold via Lua script: SET only if current value is false or "available" — prevents race conditions
 
-**Background Worker (design, not yet coded):**
-- Runs every 60s via asyncio
-- Queries bookings WHERE status='held' AND expires_at < now()
-- Marks expired bookings as no_show, increments penalty_count, bans if >= 3, releases Redis key
+**Background Worker (Implemented & Verified) ✅:**
+- Runs every 60s via an asyncio background task started in uvicorn lifespan context manager in `main.py`.
+- Queries bookings WHERE `status = 'held'`.
+- Marks expired bookings (database time window passed OR Redis lock gone) as `'expired'` in PostgreSQL.
+- Releases corresponding Redis slot keys and deletes QR token lookup keys safely.
 
 ---
 
@@ -296,6 +297,13 @@ smart-park-and-ride/
 | Feature | Status | Files Changed |
 |---|---|---|
 | Vehicle Verification (License Plate Registration) | ✅ Done | `db/schema.sql`, `db/migrations/001_add_license_plate.sql`, `backend/routers/slots.py`, `frontend/index.html`, `frontend/app.js`, `frontend/style.css` |
+| Secure Admin Credentials (Phase 0.1) | ✅ Done | `backend/routers/admin.py`, `docker-compose.yml` |
+| Environment-based API config (Phase 0.2) | ✅ Done | `frontend/config.js`, `frontend/config.example.js`, `frontend/app.js`, `frontend/admin.js`, `frontend/index.html`, `frontend/admin.html`, `.gitignore` |
+| Tighten CORS restrictions (Phase 0.3) | ✅ Done | `backend/main.py`, `docker-compose.yml` |
+| Background Expiry Worker (Phase 1.1) | ✅ Done | `backend/expiry_worker.py`, `backend/main.py` |
+| Structured Logging System (Phase 1.2) | ✅ Done | `backend/main.py`, `backend/routers/slots.py` |
+| Global Exception Handling (Phase 1.3) | ✅ Done | `backend/main.py` |
+| Environment Setup (.env.example) (Phase 1.4) | ✅ Done | `.env.example` |
 
 #### Vehicle Verification — Implementation Detail
 
@@ -340,11 +348,11 @@ ALTER TABLE bookings
 ### Phase 5 — Dockerization & Production Polish
 
 - Add `frontend/` as a static file server (nginx container) to docker-compose
-- Restrict CORS in `main.py` to only the frontend origin
-- Add `.env` file for secrets (DB password, admin credentials)
+- ~~Restrict CORS in `main.py` to only the frontend origin~~ → **Fixed** ✅ (Phase 0.3)
+- ~~Add `.env` file for secrets (DB password, admin credentials)~~ → **Fixed** ✅ (Phase 1.4 template created)
 - Replace placeholder `qr_token` (UUID) with signed JWT using `python-jose`
 - Add `nginx.conf` for frontend serving + proxy pass to backend on `/api`
-- Move `API_BASE` to a config file / env var so it doesn't need manual edits for device testing
+- ~~Move `API_BASE` to a config file / env var so it doesn't need manual edits for device testing~~ → **Fixed** ✅ (Phase 0.2 config.js implemented)
 
 ### Known TODOs / Technical Debt
 
@@ -353,6 +361,6 @@ ALTER TABLE bookings
 - ~~QR camera scanner for admin~~ → **Fixed & E2E tested** ✅
 - `user_id` in `POST /slots/{id}/hold` is hardcoded to a placeholder UUID — real auth (phone-based login + JWT) not yet implemented
 - QR code uses external `api.qrserver.com` — consider self-hosted `qrcode.js` for offline/LAN support
-- Background worker (expiry sweep + penalty calculation) is designed but not yet coded
-- `API_BASE` in `admin.js` and `app.js` currently hardcoded to `172.20.10.2:8000` (hotspot IP from device testing) — revert to `localhost:8000` before next local-only session
+- ~~Background worker (expiry sweep)~~ → **Implemented & Verified** ✅ (Phase 1.1)
+- ~~`API_BASE` hardcoded configurations~~ → **Fixed** ✅ (Phase 0.2)
 - `last_known_status` on `parking_slots` not updated on hold — only Redis holds live state; recovery path not yet implemented
