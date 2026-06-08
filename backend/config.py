@@ -23,6 +23,7 @@ class Settings:
         "JWT_SECRET",
         "smart-park-and-ride-default-jwt-secret-v1",
     )
+    TRUST_PROXY: bool = os.getenv("TRUST_PROXY", "False").lower() in ("true", "1", "yes")
     OPERATOR_USERNAME: str = os.getenv("OPERATOR_USERNAME", "operator")
     OPERATOR_PASSWORD: str = os.getenv("OPERATOR_PASSWORD", "operator123")
     LIMIT_HOLD: int = int(os.getenv("LIMIT_HOLD", "5"))
@@ -36,12 +37,43 @@ class Settings:
             raise RuntimeError(
                 "Admin credentials must be provided via environment variables (e.g. ADMIN_USER/ADMIN_USERNAME and ADMIN_PASSWORD)."
             )
-        if self.ADMIN_PASSWORD == "password123":
-            warnings.warn(
-                "ADMIN_PASSWORD is set to the default value 'password123'. "
-                "This is acceptable for local development but you should set a strong password in production."
-            )
+        
+        is_production = os.getenv("ENV", "").lower() == "production"
+
+        if is_production:
+            if self.ADMIN_PASSWORD == "password123":
+                raise RuntimeError(
+                    "ADMIN_PASSWORD is set to the default value 'password123'. "
+                    "This is insecure and prohibited in a production environment."
+                )
+            if self.OPERATOR_PASSWORD == "operator123":
+                raise RuntimeError(
+                    "OPERATOR_PASSWORD is set to the default value 'operator123'. "
+                    "This is insecure and prohibited in a production environment."
+                )
+            if not self.JWT_SECRET or self.JWT_SECRET == "smart-park-and-ride-default-jwt-secret-v1":
+                raise RuntimeError(
+                    "JWT_SECRET is unset or set to the default development value. "
+                    "A unique, secure JWT_SECRET must be provided in a production environment."
+                )
+        else:
+            if self.ADMIN_PASSWORD == "password123":
+                warnings.warn(
+                    "ADMIN_PASSWORD is set to the default value 'password123'. "
+                    "This is acceptable for local development but you should set a strong password in production."
+                )
+            if self.OPERATOR_PASSWORD == "operator123":
+                warnings.warn(
+                    "OPERATOR_PASSWORD is set to the default value 'operator123'. "
+                    "This is acceptable for local development but you should set a strong password in production."
+                )
+            if self.JWT_SECRET == "smart-park-and-ride-default-jwt-secret-v1":
+                warnings.warn(
+                    "JWT_SECRET is set to the default development value. "
+                    "This is acceptable for local development but you should set a strong secret in production."
+                )
 
 # Singleton Settings object
 settings = Settings()
 settings.validate()
+

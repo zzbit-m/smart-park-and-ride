@@ -524,7 +524,7 @@ async def hold_slot(db: AsyncSession, slot_id: int, license_plate: str, actor: s
     }
 
 
-async def release_hold(db: AsyncSession, slot_id: int, actor: str) -> dict:
+async def release_hold(db: AsyncSession, slot_id: int, qr_token: str, actor: str) -> dict:
     """Release a held slot (used by frontend cancel / scan-out)."""
     token_row = await db.execute(
         text("""
@@ -551,6 +551,14 @@ async def release_hold(db: AsyncSession, slot_id: int, actor: str) -> dict:
             BookingStateMachine.check_transition(row.status, "expired")
         else:
             raise HTTPException(status_code=404, detail="No active hold found for slot")
+
+    # Validate ownership of the hold via QR token comparison
+    if not qr_token or token_result.qr_token != qr_token:
+        logger.warning(f"Unauthorized release hold attempt on slot_id={slot_id} with token='{qr_token}'")
+        raise HTTPException(
+            status_code=403,
+            detail="Permission denied: Invalid hold validation token"
+        )
 
     await release_slot(slot_id)
 

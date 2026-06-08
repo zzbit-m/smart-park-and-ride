@@ -31,25 +31,13 @@ ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.st
 
 
 
-from expiry_worker import run_expiry_worker
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_connections()
     await auto_seed()   # no-op when parking_slots already has rows
-    
-    # Start background worker task
-    worker_task = asyncio.create_task(run_expiry_worker())
-    
     try:
         yield
     finally:
-        # Cancel and wait for background worker
-        worker_task.cancel()
-        try:
-            await worker_task
-        except asyncio.CancelledError:
-            pass
         await close_connections()
 
 

@@ -92,7 +92,10 @@ class AnalyticsResponse(BaseModel):
 
 
 @router.get("/analytics", response_model=AnalyticsResponse)
-async def get_analytics(db: AsyncSession = Depends(get_db)):
+async def get_analytics(
+    _: dict = Depends(verify_operator_token),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Return parking usage analytics for operational planning:
     - peak_hours: check-ins grouped by local hour, sorted by count desc
@@ -112,6 +115,13 @@ async def seed_slots(
     Temporary dev endpoint: seed zones, 20 parking slots (A1–A10, B1–B10),
     and the placeholder user for bookings.
     """
+    import os
+    from fastapi import HTTPException
+    if os.getenv("ENV", "").lower() == "production":
+        raise HTTPException(
+            status_code=403,
+            detail="Database seeding is disabled in production environments."
+        )
     actor = auth_payload.get("sub", "unknown_admin")
     return await slot_service.seed_slots(db, actor=actor)
 
@@ -181,7 +191,11 @@ async def hold_slot_endpoint(
 
 
 @router.delete("/{slot_id}/hold")
-async def release_hold(slot_id: int, db: AsyncSession = Depends(get_db)):
+async def release_hold(
+    slot_id: int,
+    qr_token: str,
+    db: AsyncSession = Depends(get_db),
+):
     """Release a held slot (used by frontend cancel / scan-out)."""
-    return await slot_service.release_hold(db, slot_id, actor="driver")
+    return await slot_service.release_hold(db, slot_id, qr_token, actor="driver")
 

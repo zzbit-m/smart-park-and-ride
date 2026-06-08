@@ -79,3 +79,25 @@ async def run_expiry_worker():
         except Exception as e:
             logger.error(f"Error in background expiry worker: {e}", exc_info=True)
         await asyncio.sleep(60)
+
+async def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    from database import init_connections, close_connections
+    logger.info("Initializing database connections inside standalone expiry worker...")
+    await init_connections()
+    try:
+        await run_expiry_worker()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Expiry worker shutdown signal received.")
+    finally:
+        logger.info("Closing database connections...")
+        await close_connections()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass

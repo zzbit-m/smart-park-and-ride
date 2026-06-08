@@ -2,32 +2,43 @@ import logging
 from fastapi import HTTPException, Request
 
 from database import get_redis
+from config import settings
+from services.jwt_helper import decode_access_token
 
 logger = logging.getLogger(__name__)
 
+# Atomic Lua script for rate limiting (INCR + EXPIRE on count == 1)
+LUA_RATE_LIMIT = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+"""
+
+
 def get_client_ip(request: Request) -> str:
-    """Resolve the client's IP address, checking X-Forwarded-For if behind a proxy."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        # Take the first IP if there is a chain of proxies
-        return forwarded.split(",")[0].strip()
+    """Resolve the client's IP address, checking X-Forwarded-For if behind a trusted proxy."""
+    if settings.TRUST_PROXY:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            # Take the first IP if there is a chain of proxies
+            return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown-ip"
 
 
 async def check_rate_limit(identifier: str, endpoint: str, limit: int, window_seconds: int) -> None:
     """
-    Atomically check and increment rate limit count in Redis.
+    Atomically check and increment rate limit count in Redis using Lua script.
     Raises HTTPException(429) if the limit is exceeded.
     """
     redis = get_redis()
     key = f"ratelimit:{endpoint}:{identifier}"
     
     try:
-        # Atomic increment
-        count = await redis.incr(key)
-        if count == 1:
-            # Set window TTL for a newly created key
-            await redis.expire(key, window_seconds)
+        # Execute atomic Lua script
+        result = await redis.eval(LUA_RATE_LIMIT, 1, key, str(window_seconds))
+        count = int(result)
             
         if count > limit:
             logger.warning(f"Rate limit exceeded on '{endpoint}' for identifier '{identifier}' ({count}/{limit})")
@@ -51,5 +62,14 @@ class RateLimiter:
         self.window_seconds = window_seconds
 
     async def __call__(self, request: Request) -> None:
+        # Bypass rate limits for authenticated admin or operator staff
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.removeprefix("Bearer ").strip()
+            payload = decode_access_token(token)
+            if payload and payload.get("role") in ["admin", "operator"]:
+                logger.debug(f"Bypassing rate limit on '{self.endpoint}' for staff user '{payload.get('sub')}'")
+                return
+
         ip = get_client_ip(request)
         await check_rate_limit(ip, self.endpoint, self.limit, self.window_seconds)

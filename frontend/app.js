@@ -192,7 +192,7 @@ async function cancelBookingFromModal() {
   }
 
   try {
-    const res = await fetch(`${API}/api/slots/${slotId}/hold`, { method: 'DELETE' });
+    const res = await fetch(`${API}/api/slots/${slotId}/hold?qr_token=${encodeURIComponent(booking.qr_token)}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(`Cancel failed (${res.status})`);
 
     clearStoredActiveBooking();
@@ -636,7 +636,8 @@ function startCountdown(expiresAt) {
 async function cancelHold() {
   if (!state.activeBooking) return;
   try {
-    await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' });
+    const qrToken = state.activeBooking.qrToken;
+    await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold?qr_token=${encodeURIComponent(qrToken)}`, { method: 'DELETE' });
   } catch (err) {
     console.error(err);
   }
@@ -687,13 +688,23 @@ async function checkOut() {
     return;
   }
 
-  if (state.activeBooking) {
-    try {
-      await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' });
-    } catch (err) {
-      console.error(err);
+  const slotId = booking.slot_id;
+  const qrToken = booking.qr_token;
+
+  try {
+    const res = await fetch(`${API}/api/slots/${slotId}/hold?qr_token=${encodeURIComponent(qrToken)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const detail = errData.detail || 'ไม่สามารถออกจากลานจอดได้';
+      alert(`⚠️ ${detail}\n\nหากคุณนำรถเข้าจอดแล้ว กรุณาสแกนคิวอาร์โค้ดที่เครื่องทางออกเพื่อยืนยันการออกจากช่องจอด`);
+      return;
     }
+  } catch (err) {
+    console.error(err);
+    showToast('🔌 เชื่อมต่อ Server ไม่สำเร็จ');
+    return;
   }
+
   clearInterval(state.countdownTimer);
   hideBookingTicketModal();
   clearStoredActiveBooking();

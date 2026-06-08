@@ -50,7 +50,28 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  expiry_worker:
+    build: ./backend
+    container_name: parking_expiry_worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://parking_user:parking_pass@postgres:5432/parking_db
+      REDIS_URL: redis://redis:6379
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python expiry_worker.py
 
 volumes:
   postgres_data:
