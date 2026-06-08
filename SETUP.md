@@ -17,10 +17,12 @@ From the repository root, start the main backend infrastructure:
 docker-compose up --build
 ```
 
-This starts three services:
+This starts four services:
 1. **API Web Server (FastAPI):** Exposed at `http://localhost:8000`
 2. **Database Engine (PostgreSQL):** Accessible at port `5432`
 3. **Session Cache & Lock Manager (Redis):** Listening at port `6379`
+4. **Background Expiry Worker:** Decoupled background script container that reconciles and releases expired holds.
+
 
 ---
 

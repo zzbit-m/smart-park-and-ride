@@ -43,8 +43,12 @@ This document outlines the core capabilities of the Smart Park & Ride system, ca
 
 ---
 
-## 🚀 Phase 5: Production Deployment & Observability (Pending)
-- **Containerized Optimization:** Focuses on minimal base image targets and multi-stage builds.
-- **Pipeline Build & Lint Gating:** Configures automated lint/validation checks to protect main branches.
-- **Centralized Metrics:** Exposes basic operational parameters for system health tracking.
-- **Operations Guides:** Provides simple step-by-step walkthroughs for staging deployment, troubleshooting, and logs configuration.
+## 🚀 Phase 5: Production Deployment & Hardening
+- **Containerized Optimization:** Secure multi-stage base image targets running under non-root user `appuser`.
+- **Pipeline Build & Lint Gating:** Automated GitHub Actions CI workflow to run tests on every pull request.
+- **Connection Health Checks:** Configured urllib-based health checks in container environments to verify service dependencies.
+- **Decoupled Background Worker:** Standalone python process container separating expiry loops from the main API process.
+- **Production Server Supervising:** FastAPI application running with Gunicorn master process overseeing 4 Uvicorn workers.
+- **Database Migrations:** Structured DB versioning with Alembic, enabling baseline migrations and clean schemas.
+- **Quality Assurance Testing:** Unit test suite covering JWT authentication and booking state machine flows.
+

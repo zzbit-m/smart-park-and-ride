@@ -38,7 +38,8 @@ stateDiagram-v2
 5. **EXPIRED:** A held reservation that did not receive confirmation before its TTL expired.
 
 ### Consistency Worker
-* A background task registered via FastAPI's `lifespan` hook polls and reconciles state inconsistencies. It identifies PostgreSQL records stuck in `HELD` that have expired in Redis, updating their status to `EXPIRED`.
+* A standalone, decoupled background worker process (`expiry_worker.py`) running as a separate container service polls and reconciles state inconsistencies. It identifies PostgreSQL records stuck in `HELD` that have expired in Redis, updating their status to `EXPIRED`.
+
 
 ---
 
