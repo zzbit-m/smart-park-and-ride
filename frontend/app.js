@@ -20,7 +20,7 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo(0, 0);
-  if (id === 'screen-tram') renderTramSchedule();
+  // if (id === 'screen-tram') renderTramSchedule();
   if (id === 'screen-parked') renderParkedScreen();
   // Sync checkout button state every time the scan-out screen is opened
   if (id === 'screen-scanout') syncCheckoutBtn();
@@ -224,12 +224,16 @@ function openPlateModal(slotId, slotCode) {
   _pendingHoldSlotCode = slotCode;
 
   const modal = document.getElementById('plate-modal');
-  const input = document.getElementById('plate-input');
+  const lettersInp = document.getElementById('plate-letters');
+  const numberInp = document.getElementById('plate-number');
+  const provinceInp = document.getElementById('plate-province');
   const hint = document.getElementById('plate-input-hint');
   const confirm = document.getElementById('plate-confirm-btn');
 
   // Reset state
-  input.value = '';
+  lettersInp.value = '';
+  numberInp.value = '';
+  provinceInp.value = '';
   hint.textContent = '';
   hint.className = 'plate-input-hint';
   confirm.disabled = true;
@@ -237,8 +241,8 @@ function openPlateModal(slotId, slotCode) {
   modal.hidden = false;
   modal.setAttribute('aria-hidden', 'false');
 
-  // Focus the input after animation
-  setTimeout(() => input.focus(), 80);
+  // Focus the first input after animation
+  setTimeout(() => lettersInp.focus(), 80);
 }
 
 function closePlateModal() {
@@ -250,41 +254,95 @@ function closePlateModal() {
 }
 
 function initPlateModal() {
-  const input = document.getElementById('plate-input');
+  const lettersInp = document.getElementById('plate-letters');
+  const numberInp = document.getElementById('plate-number');
+  const provinceInp = document.getElementById('plate-province');
   const hint = document.getElementById('plate-input-hint');
   const confirm = document.getElementById('plate-confirm-btn');
 
-  // Live validation: enable confirm only when non-empty
-  input.addEventListener('input', () => {
-    const val = input.value.trim();
-    if (val.length === 0) {
+  function validateInputs() {
+    const lettersVal = lettersInp.value.trim();
+    const numberVal = numberInp.value.trim();
+    const provinceVal = provinceInp.value.trim();
+
+    const lettersOk = /^[ก-ฮ]+$/.test(lettersVal);
+    const numberOk = /^\d+$/.test(numberVal);
+    const provinceOk = provinceVal.length > 0;
+
+    if (lettersVal.length === 0 && numberVal.length === 0 && provinceVal.length === 0) {
       confirm.disabled = true;
       hint.textContent = '';
       hint.className = 'plate-input-hint';
-    } else if (val.length > 20) {
+      return;
+    }
+
+    if (!lettersOk && lettersVal.length > 0) {
       confirm.disabled = true;
-      hint.textContent = 'ทะเบียนรถต้องไม่เกิน 20 ตัวอักษร';
+      hint.textContent = 'หมวดอักษรต้องเป็นภาษาไทยเท่านั้น';
       hint.className = 'plate-input-hint error';
+      return;
+    }
+
+    if (!numberOk && numberVal.length > 0) {
+      confirm.disabled = true;
+      hint.textContent = 'เลขทะเบียนต้องเป็นตัวเลขเท่านั้น';
+      hint.className = 'plate-input-hint error';
+      return;
+    }
+
+    if (lettersOk && numberOk && provinceOk) {
+      const combined = `${lettersVal} ${numberVal} ${provinceVal}`;
+      if (combined.length > 20) {
+        confirm.disabled = true;
+        hint.textContent = 'ทะเบียนรถรวมต้องไม่เกิน 20 ตัวอักษร';
+        hint.className = 'plate-input-hint error';
+      } else {
+        confirm.disabled = false;
+        hint.textContent = '';
+        hint.className = 'plate-input-hint';
+      }
     } else {
-      confirm.disabled = false;
-      hint.textContent = '';
+      confirm.disabled = true;
+      hint.textContent = 'กรุณากรอกข้อมูลให้ครบถ้วน';
       hint.className = 'plate-input-hint';
     }
+  }
+
+  // Live input filtering and validation
+  lettersInp.addEventListener('input', () => {
+    lettersInp.value = lettersInp.value.replace(/[^ก-ฮ]/g, '');
+    validateInputs();
+  });
+
+  numberInp.addEventListener('input', () => {
+    numberInp.value = numberInp.value.replace(/[^0-9]/g, '');
+    validateInputs();
+  });
+
+  provinceInp.addEventListener('input', () => {
+    validateInputs();
   });
 
   // Enter key submits if confirm is enabled
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !confirm.disabled) {
-      confirm.click();
-    }
+  [lettersInp, numberInp, provinceInp].forEach(inp => {
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !confirm.disabled) {
+        confirm.click();
+      }
+    });
   });
 
   document.getElementById('plate-cancel-btn').addEventListener('click', closePlateModal);
   document.getElementById('plate-modal-overlay').addEventListener('click', closePlateModal);
 
   confirm.addEventListener('click', async () => {
-    const plate = input.value.trim().toUpperCase();
-    if (!plate) return;
+    const lettersVal = lettersInp.value.trim();
+    const numberVal = numberInp.value.trim();
+    const provinceVal = provinceInp.value.trim();
+
+    if (!lettersVal || !numberVal || !provinceVal) return;
+
+    const plate = `${lettersVal} ${numberVal} ${provinceVal}`;
 
     const slotId = _pendingHoldSlotId;
     const slotCode = _pendingHoldSlotCode;
@@ -593,8 +651,11 @@ function renderParkedScreen() {
   const slot = state.parkedSlot || '—';
   document.getElementById('parked-slot-display').textContent = slot;
   document.getElementById('scanout-slot-display').textContent = slot;
-  const mins = Math.floor(Math.random() * 10) + 3;
-  document.getElementById('tram-next-time').textContent = `${mins} นาที`;
+  const tramEl = document.getElementById('tram-next-time');
+  if (tramEl) {
+    const mins = Math.floor(Math.random() * 10) + 3;
+    tramEl.textContent = `${mins} นาที`;
+  }
   syncCheckoutBtn();
 }
 
@@ -647,6 +708,9 @@ async function checkOut() {
 
 // ── TRAM SCHEDULE (Phase 8 — fetches mock from /api/trams/live) ──
 async function renderTramSchedule() {
+  // Tram features are temporarily disabled
+  return;
+  /*
   const pillText = document.getElementById('tram-live-pill-text');
 
   try {
@@ -667,6 +731,7 @@ async function renderTramSchedule() {
     // Fail silently — static pill text is already in the HTML
     console.warn('[Tram] Could not fetch live data, showing static placeholder.', err);
   }
+  */
 }
 
 

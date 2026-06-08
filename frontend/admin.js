@@ -46,6 +46,14 @@ function authHeaders() {
 function showDashboard() {
   document.getElementById('login-overlay').style.display = 'none';
   document.getElementById('admin-dashboard').hidden = false;
+  
+  // Show/hide export-btn based on role
+  const role = localStorage.getItem('adminRole');
+  const exportBtn = document.getElementById('export-btn');
+  if (exportBtn) {
+    exportBtn.hidden = (role !== 'admin');
+  }
+
   // Focus QR input once the dashboard is visible
   setTimeout(() => {
     const inp = document.getElementById('qr-input');
@@ -95,6 +103,7 @@ async function performLogin(e) {
     if (res.ok) {
       const data = await res.json();
       saveToken(data.token);
+      localStorage.setItem('adminRole', data.role);
       showDashboard();
     } else {
       const errData = await res.json().catch(() => ({}));
@@ -115,6 +124,7 @@ async function performLogin(e) {
 /* ── Logout ── */
 function performLogout() {
   clearToken();
+  localStorage.removeItem('adminRole');
   // Reset form fields
   document.getElementById('login-username').value = '';
   document.getElementById('login-password').value = '';
@@ -125,6 +135,7 @@ function performLogout() {
 /* ── Handle 401 from any API call (token expired / revoked) ── */
 function handle401() {
   clearToken();
+  localStorage.removeItem('adminRole');
   showLoginOverlay('⚠️ Session หมดอายุ — กรุณาเข้าสู่ระบบใหม่');
 }
 
@@ -335,6 +346,57 @@ function showManualResult(type, message) {
   }, 6000);
 }
 
+/* ── Export Data ── */
+async function performExport() {
+  const btn = document.getElementById('export-btn');
+  if (!btn) return;
+
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Downloading...';
+
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/export`, {
+      method: 'GET',
+      headers: authHeaders(),
+    });
+
+    if (response.status === 401) {
+      handle401();
+      return;
+    }
+
+    if (response.status === 403) {
+      alert('❌ Permission Denied: Only administrators can export system data.');
+      return;
+    }
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      alert(`❌ Export failed: ${errData.detail || response.statusText}`);
+      return;
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.download = `smart_park_export_${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error('[Admin/Export] Error exporting data:', err);
+    alert('🔌 Export failed due to network error.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
 /* ══════════════════════════════════════════════════════
    EVENT WIRING — deferred until DOMContentLoaded
 ══════════════════════════════════════════════════════ */
@@ -356,6 +418,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const pwInput = getEl('login-password');
     pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
   });
+
+  /* ── Export ── */
+  const exportBtn = getEl('export-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', performExport);
+  }
 
   /* ── Logout ── */
   getEl('logout-btn').addEventListener('click', performLogout);

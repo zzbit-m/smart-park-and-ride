@@ -64,35 +64,35 @@ _MOCK_TRAMS: list[dict] = [
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 
-@router.get(
-    "/live",
-    response_model=LiveTramsResponse,
-    summary="Live tram arrivals (mock)",
-    description="""
-Returns upcoming tram arrivals for the Smart Park & Ride station.
-
-> ⚠️ **Phase 8 — Mock Data**  
-> This endpoint currently returns static demo data for presentation purposes.  
-> Real-time data will be populated by the tram hardware integration in Phase 9.
-
-### Fields
-| Field | Description |
-|---|---|
-| `line` | Tram line name (Thai) |
-| `line_color` | Hex color for UI rendering |
-| `next_arrival` | Human-readable ETA |
-| `status` | `กำลังมา` / `ปกติ` / `ล่าช้า` / `หยุดให้บริการ` |
-| `platform` | Boarding platform label |
-""",
-)
-async def get_live_trams() -> LiveTramsResponse:
-    """
-    Simulate real-time tram arrival board for the Park & Ride station.
-    Returns static mock entries; replace with live hardware feed in Phase 9.
-    """
-    from datetime import datetime, timezone
-    return LiveTramsResponse(
-        source="mock — Phase 8 demo",
-        updated_at=datetime.now(timezone.utc).isoformat(),
-        trams=[TramEntry(**t) for t in _MOCK_TRAMS],
-    )
+# @router.get(
+#     "/live",
+#     response_model=LiveTramsResponse,
+#     summary="Live tram arrivals (mock)",
+#     description="""
+# Returns upcoming tram arrivals for the Smart Park & Ride station.
+# 
+# > ⚠️ **Phase 8 — Mock Data**  
+# > This endpoint currently returns static demo data for presentation purposes.  
+# > Real-time data will be populated by the tram hardware integration in Phase 9.
+# 
+# ### Fields
+# | Field | Description |
+# |---|---|
+# | `line` | Tram line name (Thai) |
+# | `line_color` | Hex color for UI rendering |
+# | `next_arrival` | Human-readable ETA |
+# | `status` | `กำลังมา` / `ปกติ` / `ล่าช้า` / `หยุดให้บริการ` |
+# | `platform` | Boarding platform label |
+# """,
+# )
+# async def get_live_trams() -> LiveTramsResponse:
+#     """
+#     Simulate real-time tram arrival board for the Park & Ride station.
+#     Returns static mock entries; replace with live hardware feed in Phase 9.
+#     """
+#     from datetime import datetime, timezone
+#     return LiveTramsResponse(
+#         source="mock — Phase 8 demo",
+#         updated_at=datetime.now(timezone.utc).isoformat(),
+#         trams=[TramEntry(**t) for t in _MOCK_TRAMS],
+#     )

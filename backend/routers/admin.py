@@ -13,7 +13,7 @@ verify_admin_token (FastAPI dependency)
 import hmac
 import hashlib
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -162,3 +162,49 @@ async def get_stats(
         occupied=counts["occupied"],
     )
 
+
+@router.get("/export")
+async def export_data(
+    _: dict = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Export slots, bookings, and audit logs (if table exists) as a JSON file download.
+    Protected: requires Admin Bearer token.
+    """
+    # 1. Fetch slots
+    slots_res = await db.execute(text("SELECT * FROM parking_slots ORDER BY slot_code"))
+    slots = [dict(row._mapping) for row in slots_res.fetchall()]
+
+    # 2. Fetch bookings
+    bookings_res = await db.execute(text("SELECT * FROM bookings ORDER BY held_at DESC"))
+    bookings = [dict(row._mapping) for row in bookings_res.fetchall()]
+
+    # 3. Check if audit_logs table exists and fetch if so
+    audit_logs = None
+    table_check = await db.execute(text(
+        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'audit_logs')"
+    ))
+    if table_check.scalar():
+        audit_res = await db.execute(text("SELECT * FROM audit_logs ORDER BY created_at DESC"))
+        audit_logs = [dict(row._mapping) for row in audit_res.fetchall()]
+
+    export_payload = {
+        "slots": slots,
+        "bookings": bookings,
+    }
+    if audit_logs is not None:
+        export_payload["audit_logs"] = audit_logs
+
+    from fastapi.encoders import jsonable_encoder
+    import json
+
+    json_data = json.dumps(jsonable_encoder(export_payload), indent=2, ensure_ascii=False)
+
+    return Response(
+        content=json_data,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": "attachment; filename=smart_park_export.json"
+        }
+    )

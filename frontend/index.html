@@ -37,7 +37,7 @@
 
     <div class="bottom-bar">
       <button class="btn-secondary" onclick="showScreen('screen-parked')">🚗 รถของฉัน</button>
-      <button class="btn-secondary" onclick="showScreen('screen-tram')">🚃 รถราง</button>
+      <!-- <button class="btn-secondary" onclick="showScreen('screen-tram')">🚃 รถราง</button> -->
     </div>
   </div>
 
@@ -89,11 +89,13 @@
         <p>โซน A · แถว 1 · ช่อง 7</p>
       </div>
 
+      <!--
       <div class="tram-next">
         <div class="tram-next-label">🚃 รถรางคันถัดไป</div>
         <div class="tram-next-time" id="tram-next-time">กำลังโหลด...</div>
         <div class="tram-next-dest">→ สถานีกลาง</div>
       </div>
+      -->
 
       <button class="btn-primary" onclick="showScreen('screen-scanout')">สแกนออก QR</button>
     </div>
@@ -120,31 +122,27 @@
     </div>
   </div>
 
-  <!-- ── TRAM SCREEN (Phase 8 — Coming Soon) ── -->
+  <!-- ── TRAM SCREEN (Phase 8 — Coming Soon) ──
   <div id="screen-tram" class="screen">
     <div class="back-btn" onclick="showScreen('screen-home')">← กลับ</div>
 
     <div class="tram-cs-container">
 
-      <!-- Animated tram icon -->
       <div class="tram-cs-icon-wrap">
         <div class="tram-cs-orbit"></div>
         <span class="tram-cs-emoji">🚃</span>
       </div>
 
-      <!-- Live next tram pill (populated by JS from /api/trams/live) -->
       <div class="tram-cs-live-pill" id="tram-live-pill">
         <span class="tram-cs-live-dot"></span>
         <span id="tram-live-pill-text">รถรางคันต่อไป: สายสีน้ำเงิน (3 นาที)</span>
       </div>
 
-      <!-- Coming Soon headline -->
       <h2 class="tram-cs-title">ระบบรถรางรับส่ง</h2>
       <p class="tram-cs-badge">Coming Soon</p>
       <p class="tram-cs-sub">อยู่ระหว่างการพัฒนา</p>
       <p class="tram-cs-hw">รอการเชื่อมต่อข้อมูลฮาร์ดแวร์รถราง</p>
 
-      <!-- Phase roadmap chips -->
       <div class="tram-cs-chips">
         <span class="tram-chip tram-chip--done">✓ Phase 7 — Scan Out</span>
         <span class="tram-chip tram-chip--active">◉ Phase 8 — Tram Mock</span>
@@ -153,6 +151,7 @@
 
     </div>
   </div>
+  -->
 
   <!-- ── TOAST ── -->
   <div class="toast" id="toast"></div>
@@ -167,17 +166,35 @@
       <p class="plate-modal-sub">กรอกทะเบียนรถของคุณเพื่อจองช่องจอด</p>
 
       <div class="plate-input-wrap">
-        <label for="plate-input" class="plate-input-label">ทะเบียนรถ (License Plate)</label>
-        <input
-          id="plate-input"
-          type="text"
-          class="plate-input"
-          placeholder="เช่น กข 1234 กรุงเทพฯ"
-          maxlength="20"
-          autocomplete="off"
-          autocapitalize="characters"
-          spellcheck="false"
-        />
+        <label class="plate-input-label">ทะเบียนรถ (License Plate)</label>
+        <div class="plate-inputs-split" style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <input
+            id="plate-letters"
+            type="text"
+            class="plate-input"
+            placeholder="อักษร (เช่น กข)"
+            maxlength="3"
+            autocomplete="off"
+            style="flex: 2.2; font-size: 15px; padding: 12px 6px; letter-spacing: 0.5px;"
+          />
+          <input
+            id="plate-number"
+            type="text"
+            class="plate-input"
+            placeholder="เลข (เช่น 1234)"
+            maxlength="4"
+            autocomplete="off"
+            style="flex: 2.8; font-size: 15px; padding: 12px 6px; letter-spacing: 0.5px;"
+          />
+          <input
+            id="plate-province"
+            type="text"
+            class="plate-input"
+            placeholder="จังหวัด"
+            autocomplete="off"
+            style="flex: 3; font-size: 15px; padding: 12px 6px; letter-spacing: 0px;"
+          />
+        </div>
         <p class="plate-input-hint" id="plate-input-hint"></p>
       </div>
 

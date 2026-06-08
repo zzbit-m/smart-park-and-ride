@@ -16,7 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from database import check_postgres, check_redis, close_connections, init_connections
 from auto_seed import auto_seed
-from routers import admin, slots, trams
+from routers import admin, slots
 from config import settings
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ app.add_middleware(
 
 app.include_router(admin.router, prefix="/api")
 app.include_router(slots.router, prefix="/api")
-app.include_router(trams.router, prefix="/api")
+# app.include_router(trams.router, prefix="/api")
 
 
 @app.get("/health")
