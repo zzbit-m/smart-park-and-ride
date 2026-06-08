@@ -265,7 +265,7 @@ function initPlateModal() {
     const numberVal = numberInp.value.trim();
     const provinceVal = provinceInp.value; // select value
 
-    const lettersOk = /^[ก-ฮ]+$/.test(lettersVal);
+    const lettersOk = /^[1-9]?[ก-ฮ]+$/.test(lettersVal);
     const numberOk = /^\d+$/.test(numberVal);
     const provinceOk = provinceVal !== "";
 
@@ -278,7 +278,7 @@ function initPlateModal() {
 
     if (!lettersOk && lettersVal.length > 0) {
       confirm.disabled = true;
-      hint.textContent = 'หมวดอักษรต้องเป็นภาษาไทยเท่านั้น';
+      hint.textContent = 'หมวดอักษรต้องเป็นภาษาไทย (สามารถมีตัวเลขนำหน้าได้ เช่น 1กข)';
       hint.className = 'plate-input-hint error';
       return;
     }
@@ -303,14 +303,16 @@ function initPlateModal() {
       }
     } else {
       confirm.disabled = true;
-      hint.textContent = 'กรุณากรอกข้อมูลให้ครบถ้วน';
+      hint.textContent = '';
       hint.className = 'plate-input-hint';
     }
   }
 
   // Live input filtering and validation
   lettersInp.addEventListener('input', () => {
-    lettersInp.value = lettersInp.value.replace(/[^ก-ฮ]/g, '');
+    lettersInp.value = lettersInp.value.replace(/[^0-9ก-ฮ]/g, '');
+    const match = lettersInp.value.match(/^([1-9]?)([ก-ฮ]*)/);
+    lettersInp.value = match ? match[0] : '';
     validateInputs();
   });
 
@@ -561,6 +563,7 @@ async function holdSlot(slotId, slotCode, licensePlate) {
       slot_code: data.slot_code,
       qr_token: data.qr_token,
       expires_at: data.expires_at,
+      license_plate: licensePlate,
     });
 
     showToast('✓ จองสำเร็จ');

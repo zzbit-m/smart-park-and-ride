@@ -113,27 +113,22 @@ async def health(response: Response):
     """
     postgres_ok = False
     redis_ok = False
-    postgres_error: str | None = None
-    redis_error: str | None = None
 
     try:
         postgres_ok = await check_postgres()
     except Exception as exc:
-        postgres_error = str(exc)
+        logger.error(f"Health check: postgres is offline: {exc}")
 
     try:
         redis_ok = await check_redis()
     except Exception as exc:
-        redis_error = str(exc)
+        logger.error(f"Health check: redis is offline: {exc}")
 
     healthy = postgres_ok and redis_ok
     if not healthy:
         response.status_code = 503
+        return {"status": "degraded"}
 
-    return {
-        "status": "ok" if healthy else "degraded",
-        "postgres": {"ok": postgres_ok, "error": postgres_error},
-        "redis": {"ok": redis_ok, "error": redis_error},
-    }
+    return {"status": "ok"}
 
 

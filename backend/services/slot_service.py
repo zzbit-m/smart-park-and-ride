@@ -512,8 +512,8 @@ async def hold_slot(db: AsyncSession, slot_id: int, license_plate: str, actor: s
         raise
 
     await set_qr_token_lookup(qr_token, slot_id, ttl_seconds=HOLD_TTL_SECONDS)
-    log_audit(actor, "hold_slot", f"Created hold for slot_id={slot_id} with license_plate={plate}")
-    logger.info(f"Created hold booking: booking_id={booking_id}, slot_id={slot_id}, license_plate='{plate}', expires_at='{expires_at.isoformat()}'")
+    log_audit(actor, "hold_slot", f"Created hold for slot_id={slot_id} (confidential plate)")
+    logger.info(f"Created hold booking: booking_id={booking_id}, slot_id={slot_id}, expires_at='{expires_at.isoformat()}'")
 
     return {
         "booking_id": booking_id,
