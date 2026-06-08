@@ -263,13 +263,13 @@ function initPlateModal() {
   function validateInputs() {
     const lettersVal = lettersInp.value.trim();
     const numberVal = numberInp.value.trim();
-    const provinceVal = provinceInp.value.trim();
+    const provinceVal = provinceInp.value; // select value
 
     const lettersOk = /^[ก-ฮ]+$/.test(lettersVal);
     const numberOk = /^\d+$/.test(numberVal);
-    const provinceOk = provinceVal.length > 0;
+    const provinceOk = provinceVal !== "";
 
-    if (lettersVal.length === 0 && numberVal.length === 0 && provinceVal.length === 0) {
+    if (lettersVal.length === 0 && numberVal.length === 0 && provinceVal === "") {
       confirm.disabled = true;
       hint.textContent = '';
       hint.className = 'plate-input-hint';
@@ -319,12 +319,12 @@ function initPlateModal() {
     validateInputs();
   });
 
-  provinceInp.addEventListener('input', () => {
+  provinceInp.addEventListener('change', () => {
     validateInputs();
   });
 
   // Enter key submits if confirm is enabled
-  [lettersInp, numberInp, provinceInp].forEach(inp => {
+  [lettersInp, numberInp].forEach(inp => {
     inp.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !confirm.disabled) {
         confirm.click();
@@ -338,7 +338,7 @@ function initPlateModal() {
   confirm.addEventListener('click', async () => {
     const lettersVal = lettersInp.value.trim();
     const numberVal = numberInp.value.trim();
-    const provinceVal = provinceInp.value.trim();
+    const provinceVal = provinceInp.value;
 
     if (!lettersVal || !numberVal || !provinceVal) return;
 
