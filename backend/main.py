@@ -1,7 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
 import logging
-import os
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,17 +17,15 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from database import check_postgres, check_redis, close_connections, init_connections
 from auto_seed import auto_seed
 from routers import admin, slots, trams
+from config import settings
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# Allowed origins are read from the environment (comma-separated).
-# For local development the defaults below cover VS Code Live Server (5500)
+# Allowed origins are read from settings (comma-separated).
+# For local development the defaults cover VS Code Live Server (5500)
 # and direct backend access.
 # In production, set CORS_ALLOWED_ORIGINS to your real frontend domain:
 #   CORS_ALLOWED_ORIGINS=https://your-app.example.com
-_raw_origins = os.getenv(
-    "CORS_ALLOWED_ORIGINS",
-    "http://localhost:5500,http://127.0.0.1:5500,http://localhost:5173,http://127.0.0.1:5173",
-)
+_raw_origins = settings.CORS_ALLOWED_ORIGINS
 ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 

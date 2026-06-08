@@ -12,7 +12,6 @@ verify_admin_token (FastAPI dependency)
 
 import hmac
 import hashlib
-import os
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
@@ -21,27 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from redis_client import get_all_slot_statuses
+from config import settings
+from services.jwt_helper import create_access_token, decode_access_token
+from services.audit import log_audit
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# ── Credentials — must be set via environment variables (no defaults) ─────────
-_ADMIN_USERNAME: str | None = os.getenv("ADMIN_USERNAME")
-_ADMIN_PASSWORD: str | None = os.getenv("ADMIN_PASSWORD")
-
-if not _ADMIN_USERNAME or not _ADMIN_PASSWORD:
-    raise RuntimeError(
-        "Admin credentials must be provided via environment variables: "
-        "ADMIN_USERNAME and ADMIN_PASSWORD"
-    )
-
-# Derive a deterministic token from the credentials + a salt so the token
-# is stable across restarts (no JWT library required).
-_SALT = "smart-park-and-ride-admin-salt-v1"
-_EXPECTED_TOKEN: str = hmac.new(
-    _SALT.encode(),
-    f"{_ADMIN_USERNAME}:{_ADMIN_PASSWORD}".encode(),
-    hashlib.sha256,
-).hexdigest()
+# ── Credentials — loaded from settings (validated on startup) ─────────────────
+_ADMIN_USERNAME = settings.ADMIN_USERNAME
+_ADMIN_PASSWORD = settings.ADMIN_PASSWORD
 
 
 # ── Request / response models ──────────────────────────────────────────────────
@@ -61,33 +48,33 @@ class LoginResponse(BaseModel):
 @router.post("/login", response_model=LoginResponse)
 async def admin_login(body: LoginRequest):
     """
-    Authenticate an admin user and return a Bearer token.
+    Authenticate an admin or operator user and return a Bearer JWT token.
     Credentials are compared in constant time to prevent timing attacks.
     """
-    username_ok = hmac.compare_digest(body.username, _ADMIN_USERNAME)
-    password_ok = hmac.compare_digest(body.password, _ADMIN_PASSWORD)
+    admin_username_ok = hmac.compare_digest(body.username, _ADMIN_USERNAME)
+    admin_password_ok = hmac.compare_digest(body.password, _ADMIN_PASSWORD)
 
-    if not (username_ok and password_ok):
+    operator_username_ok = hmac.compare_digest(body.username, settings.OPERATOR_USERNAME)
+    operator_password_ok = hmac.compare_digest(body.password, settings.OPERATOR_PASSWORD)
+
+    if admin_username_ok and admin_password_ok:
+        role = "admin"
+    elif operator_username_ok and operator_password_ok:
+        role = "operator"
+    else:
+        log_audit(body.username, "login_failed", "Invalid credentials provided")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return LoginResponse(token=_EXPECTED_TOKEN, role="admin")
+    token = create_access_token({"sub": body.username, "role": role})
+    log_audit(body.username, "login_success", f"Successful login with role='{role}'")
+    return LoginResponse(token=token, role=role)
 
 
-# ── Reusable auth dependency ────────────────────────────────────────────────────
+# ── Reusable auth dependencies ──────────────────────────────────────────────────
 
-async def verify_admin_token(authorization: str = Header(default="")) -> str:
+async def verify_admin_token(authorization: str = Header(default="")) -> dict:
     """
-    FastAPI dependency — extract and validate the Bearer token.
-
-    Usage:
-        from routers.admin import verify_admin_token
-
-        @router.post("/some-protected-endpoint")
-        async def handler(
-            _: str = Depends(verify_admin_token),
-            db: AsyncSession = Depends(get_db),
-        ):
-            ...
+    FastAPI dependency — extract and validate the Bearer token for admin-only endpoints.
     """
     if not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -96,10 +83,35 @@ async def verify_admin_token(authorization: str = Header(default="")) -> str:
         )
 
     token = authorization.removeprefix("Bearer ").strip()
-    if not hmac.compare_digest(token, _EXPECTED_TOKEN):
+    payload = decode_access_token(token)
+    if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    return token
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    return payload
+
+
+async def verify_operator_token(authorization: str = Header(default="")) -> dict:
+    """
+    FastAPI dependency — extract and validate the Bearer token for admin or operator access.
+    """
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or malformed Authorization header (expected: Bearer <token>)",
+        )
+
+    token = authorization.removeprefix("Bearer ").strip()
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    if payload.get("role") not in ["admin", "operator"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    return payload
 
 
 # ── Stats endpoint ─────────────────────────────────────────────────────────────
@@ -113,7 +125,7 @@ class StatsResponse(BaseModel):
 
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats(
-    _: str = Depends(verify_admin_token),
+    _: dict = Depends(verify_operator_token),
     db: AsyncSession = Depends(get_db),
 ):
     """
