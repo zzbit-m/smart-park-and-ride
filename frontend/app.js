@@ -3,7 +3,6 @@
 // Falls back to localhost for safety if config.js is missing.
 const API = (window.APP_CONFIG && window.APP_CONFIG.API_BASE) || 'http://localhost:8000';
 const SLOTS_URL = `${API}/api/slots`;
-const QR_API = 'https://api.qrserver.com/v1/create-qr-code/';
 const ACTIVE_BOOKING_KEY = 'activeBooking';
 
 
@@ -113,8 +112,11 @@ function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at, l
 
   document.getElementById('ticket-slot-code').textContent = slot_code;
   document.getElementById('ticket-booking-id').textContent = booking_id;
-  document.getElementById('ticket-qr-image').src =
-    `${QR_API}?size=150x150&data=${encodeURIComponent(qr_token)}`;
+  new QRious({
+    element: document.getElementById('ticket-qr-image'),
+    value: qr_token,
+    size: 150
+  });
   document.getElementById('ticket-qr-image').alt = `QR Code for slot ${slot_code}`;
 
   // Show / hide license plate detail row
@@ -525,13 +527,18 @@ function renderQR(token) {
   const box = document.getElementById('qr-box');
   box.innerHTML = `
     <img
-      src="${QR_API}?size=150x150&data=${encodeURIComponent(token)}"
+      id="hold-qr-image"
       alt="Booking QR Code"
       width="150"
       height="150"
       style="border-radius:4px;"
     />
   `;
+  new QRious({
+    element: document.getElementById('hold-qr-image'),
+    value: token,
+    size: 150
+  });
 }
 
 // ── COUNTDOWN ──

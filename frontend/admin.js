@@ -15,6 +15,7 @@ const API_SCAN_IN = `${API_BASE}/api/slots/scan`;
 const API_SCAN_OUT = `${API_BASE}/api/slots/scan-out`;
 const API_MANUAL_RELEASE = `${API_BASE}/api/slots/manual-release`;
 const API_STATS = `${API_BASE}/api/admin/stats`;
+const API_ANALYTICS = `${API_BASE}/api/slots/analytics`;
 
 const TOKEN_KEY = 'adminToken';
 
@@ -666,6 +667,8 @@ function initTabNav() {
 ══════════════════════════════════════════════════════ */
 
 let _statsChart      = null;  // Chart.js instance (singleton)
+let _peakHoursChart  = null;
+let _dailyTrafficChart = null;
 let _dashRefreshTimer = null;
 
 const DASH_REFRESH_MS = 30_000; // 30 seconds
@@ -690,8 +693,10 @@ function initDashboard() {
     });
   }
 
-  // Build the chart once (on empty data) so the canvas is ready
+  // Build the charts once (on empty data) so the canvases are ready
   buildChart({ total: 0, available: 0, held: 0, occupied: 0 });
+  buildPeakHoursChart([]);
+  buildDailyTrafficChart([]);
 
   // Start auto-refresh (only ticks; actual fetch triggered on tab switch)
   _dashRefreshTimer = setInterval(() => {
@@ -707,26 +712,54 @@ async function fetchStats() {
   if (lastUpdatedEl) lastUpdatedEl.textContent = 'กำลังโหลด…';
 
   try {
-    const res = await fetch(API_STATS, {
-      method: 'GET',
-      headers: authHeaders(),
-    });
+    const [statsRes, analyticsRes] = await Promise.all([
+      fetch(API_STATS, {
+        method: 'GET',
+        headers: authHeaders(),
+      }),
+      fetch(API_ANALYTICS, {
+        method: 'GET',
+        headers: authHeaders(),
+      })
+    ]);
 
-    if (res.status === 401) { handle401(); return; }
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error('[Dashboard] stats error:', err);
-      if (lastUpdatedEl) lastUpdatedEl.textContent = `⚠️ โหลดข้อมูลไม่ได้ (${res.status})`;
+    if (statsRes.status === 401 || analyticsRes.status === 401) {
+      handle401();
       return;
     }
 
-    const data = await res.json();
-    // data = { total, available, held, occupied }
+    if (!statsRes.ok) {
+      const err = await statsRes.json().catch(() => ({}));
+      console.error('[Dashboard] stats error:', err);
+      if (lastUpdatedEl) lastUpdatedEl.textContent = `⚠️ โหลดข้อมูลไม่ได้ (${statsRes.status})`;
+      return;
+    }
 
-    updateKpiCards(data);
-    updateChart(data);
-    updateLegend(data);
+    if (!analyticsRes.ok) {
+      const err = await analyticsRes.json().catch(() => ({}));
+      console.error('[Dashboard] analytics error:', err);
+      if (lastUpdatedEl) lastUpdatedEl.textContent = `⚠️ โหลดข้อมูลไม่ได้ (${analyticsRes.status})`;
+      return;
+    }
+
+    const statsData = await statsRes.json();
+    const analyticsData = await analyticsRes.json();
+
+    // ── 1. Live status stats ──
+    updateKpiCards(statsData);
+    updateChart(statsData);
+    updateLegend(statsData);
+
+    // ── 2. Historical analytics ──
+    const avgMin = analyticsData.average_duration_minutes ?? 0;
+    const durationText = avgMin > 0 ? `${avgMin.toFixed(1)} ม.` : '—';
+    const setTxt = (id, val) => { const el = getEl(id); if (el) el.textContent = val; };
+    setTxt('kpi-avg-duration', durationText);
+    setTxt('kpi-completed',    analyticsData.summary_stats?.total_completed ?? 0);
+    setTxt('kpi-cancelled',    analyticsData.summary_stats?.total_cancelled ?? 0);
+
+    buildPeakHoursChart(analyticsData.peak_hours || []);
+    buildDailyTrafficChart(analyticsData.daily_traffic || []);
 
     const now = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     if (lastUpdatedEl) lastUpdatedEl.textContent = `อัปเดตล่าสุด: ${now}  ·  Auto-refresh ทุก 30 วิ`;
@@ -735,6 +768,154 @@ async function fetchStats() {
     console.error('[Dashboard] Network error:', err);
     if (lastUpdatedEl) lastUpdatedEl.textContent = '🔌 เชื่อมต่อ Server ไม่ได้';
   }
+}
+
+/* ── Build Peak Hours Chart ── */
+function buildPeakHoursChart(peakHours) {
+  const canvas = getEl('peak-hours-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  if (_peakHoursChart) {
+    _peakHoursChart.destroy();
+    _peakHoursChart = null;
+  }
+
+  const dataArray = Array(24).fill(0);
+  peakHours.forEach(item => {
+    if (item.hour >= 0 && item.hour < 24) {
+      dataArray[item.hour] = item.count;
+    }
+  });
+
+  const labels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+
+  _peakHoursChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'จำนวนเช็คอิน',
+        data: dataArray,
+        backgroundColor: 'rgba(61, 139, 255, 0.75)',
+        borderColor: '#3d8bff',
+        borderWidth: 1,
+        borderRadius: 4,
+        barPercentage: 0.7,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(10,15,30,0.92)',
+          titleColor: '#fff',
+          bodyColor: 'rgba(255,255,255,0.75)',
+          borderColor: 'rgba(61,139,255,0.2)',
+          borderWidth: 1,
+          padding: 10,
+          titleFont: { family: 'Kanit' },
+          bodyFont: { family: 'Kanit' },
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            color: '#6b7a99',
+            font: { family: 'DM Mono', size: 9 },
+            maxRotation: 45,
+            autoSkip: true,
+            maxTicksLimit: 8
+          }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            color: '#6b7a99',
+            font: { family: 'DM Mono', size: 9 },
+            precision: 0
+          }
+        }
+      }
+    }
+  });
+}
+
+/* ── Build Daily Traffic Chart ── */
+function buildDailyTrafficChart(dailyTraffic) {
+  const canvas = getEl('daily-traffic-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  if (_dailyTrafficChart) {
+    _dailyTrafficChart.destroy();
+    _dailyTrafficChart = null;
+  }
+
+  const dayMap = {
+    'Sunday': 'Sun',
+    'Monday': 'Mon',
+    'Tuesday': 'Tue',
+    'Wednesday': 'Wed',
+    'Thursday': 'Thu',
+    'Friday': 'Fri',
+    'Saturday': 'Sat'
+  };
+
+  const sortedTraffic = [...dailyTraffic].sort((a, b) => a.day_of_week - b.day_of_week);
+  const labels = sortedTraffic.map(item => dayMap[item.day_name] || item.day_name);
+  const dataArray = sortedTraffic.map(item => item.count);
+
+  _dailyTrafficChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'จำนวนเช็คอิน',
+        data: dataArray,
+        backgroundColor: 'rgba(0, 229, 160, 0.75)',
+        borderColor: '#00e5a0',
+        borderWidth: 1,
+        borderRadius: 4,
+        barPercentage: 0.5,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(10,15,30,0.92)',
+          titleColor: '#fff',
+          bodyColor: 'rgba(255,255,255,0.75)',
+          borderColor: 'rgba(0,229,160,0.2)',
+          borderWidth: 1,
+          padding: 10,
+          titleFont: { family: 'Kanit' },
+          bodyFont: { family: 'Kanit' },
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            color: '#6b7a99',
+            font: { family: 'DM Mono', size: 10 }
+          }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            color: '#6b7a99',
+            font: { family: 'DM Mono', size: 10 },
+            precision: 0
+          }
+        }
+      }
+    }
+  });
 }
 
 /* ── Build Chart.js doughnut (called once) ── */

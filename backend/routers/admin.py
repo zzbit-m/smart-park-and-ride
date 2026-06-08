@@ -141,10 +141,11 @@ async def get_stats(
         return StatsResponse(total=0, available=0, held=0, occupied=0)
 
     # 2. Batch-read live status from Redis (one MGET call)
-    raw_statuses: list[str | None] = await get_all_slot_statuses(slot_ids)
+    statuses: dict[int, str] = await get_all_slot_statuses(slot_ids)
 
     counts = {"available": 0, "held": 0, "occupied": 0}
-    for raw in raw_statuses:
+    for slot_id in slot_ids:
+        raw = statuses.get(slot_id, "available")
         if raw is None or raw == "available":
             counts["available"] += 1
         elif raw.startswith("held"):

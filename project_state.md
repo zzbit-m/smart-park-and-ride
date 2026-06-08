@@ -29,15 +29,17 @@
 - **3.3 Rate Limiting:** Enforced Redis-backed atomic rate limiting for critical hold and scan endpoints.
 - **3.4 Audit Logging:** Added structured audit logging helper and integrated it across authentication and service actions.
 
+### Phase 4: Product Features - IN PROGRESS
+- **4.1 Dashboard Analytics:** Added historical analytics charts (Peak Hours, Daily Traffic) and KPI cards (Avg Duration, Completed, Cancelled) on the Admin Dashboard panel, and resolved an `AttributeError` type mismatch in the live stats counts endpoint.
+- **4.3 Replace External QR Service:** Replaced the external `api.qrserver.com` QR generation service with a local offline-capable client-side library (`qrious.min.js`).
+
 ## Technical Architecture Notes
 - **Backend:** FastAPI
 - **Database:** PostgreSQL (Source of Truth), Redis (Temporary Locks/TTL)
 - **Frontend:** Vanilla JS (Vite transition planned for Phase 5)
 - **Background Tasks:** Handled natively via FastAPI `lifespan` context manager.
 
-## Next Phase Target: Phase 4 (Product Features)
-- **4.1 Dashboard Analytics:** Occupancy trends, peak hours, usage patterns.
+## Next Phase Target: Phase 4 (Product Features) Continued
 - **4.2 Smart Recommendations:** Suggest slots, optimize allocation.
-- **4.3 Replace External QR Service:** Generate QR codes locally.
 
 

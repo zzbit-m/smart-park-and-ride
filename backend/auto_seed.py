@@ -100,6 +100,10 @@ async def auto_seed() -> None:
         for slot_id, slot_code in slots_created:
             await redis.set(get_slot_key(slot_id), "available")
 
+        if slots_created:
+            from services.audit import log_audit
+            log_audit("system", "auto_seed", f"Auto-seeded {len(slots_created)} parking slots and placeholder user")
+
         logger.info(
             "[seed] Auto-seed complete — %d slots created: %s",
             len(slots_created),
