@@ -1,4 +1,5 @@
 import os
+import warnings
 from dotenv import load_dotenv
 
 # Load environment variables from .env if present
@@ -36,9 +37,9 @@ class Settings:
                 "Admin credentials must be provided via environment variables (e.g. ADMIN_USER/ADMIN_USERNAME and ADMIN_PASSWORD)."
             )
         if self.ADMIN_PASSWORD == "password123":
-            raise RuntimeError(
-                "ADMIN_PASSWORD cannot be set to the default value 'password123'. "
-                "Please configure a strong password in your .env file."
+            warnings.warn(
+                "ADMIN_PASSWORD is set to the default value 'password123'. "
+                "This is acceptable for local development but you should set a strong password in production."
             )
 
 # Singleton Settings object

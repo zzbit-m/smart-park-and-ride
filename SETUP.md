@@ -69,18 +69,18 @@ Ensure all backend connections are healthy by querying the health check route:
 ```bash
 curl http://localhost:8000/health
 ```
-A successful response returns: `{"status":"healthy","database":"connected","redis":"connected"}`
+A successful response returns: `{"status":"ok"}`
 
 ### Seed Initial Data
 Populate the database with sample slot information.
 1. Authenticate to retrieve an Admin token:
    ```bash
-   curl -X POST http://localhost:8000/api/v1/auth/token \
-     -H "Content-Type: application/x-www-form-urlencoded" \
-     -d "username=admin&password=password123"
+   curl -X POST http://localhost:8000/api/admin/login \
+     -H "Content-Type: application/json" \
+     -d '{"username":"admin","password":"password123"}'
    ```
 2. Trigger the seeding execution using the returned token:
    ```bash
-   curl -X POST http://localhost:8000/api/v1/admin/seed \
+   curl -X POST http://localhost:8000/api/slots/seed \
      -H "Authorization: Bearer <ADMIN_TOKEN>"
    ```
