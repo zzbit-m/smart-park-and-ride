@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover
 
 from database import check_postgres, check_redis, close_connections, init_connections
 from auto_seed import auto_seed
-from routers import admin, slots, auth, users
+from routers import admin, slots, auth, users, feedback
 from config import settings
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -114,6 +114,7 @@ app.include_router(admin.router, prefix="/api")
 app.include_router(slots.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
+app.include_router(feedback.router, prefix="/api")
 # app.include_router(trams.router, prefix="/api")
 
 

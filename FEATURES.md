@@ -64,7 +64,18 @@ Core capabilities of the Smart Park & Ride system, grouped by phase.
 
 ---
 
-## 🚘 Phase 6: Passenger Identity & Vehicle Registry
+## 💬 Phase 6: User Feedback System
+- **Submit Feedback:** `POST /api/feedback/` — accepts bug, feature, general requests (rate-limited, 10/min).
+- **Admin Review Panel:** `GET /api/feedback/` with `?status=`, `?type=`, pagination (`?limit=`, `?offset=`).
+- **Status Management:** `PATCH /api/feedback/{id}` — update status: open → reviewed → closed (404 on missing).
+- **Validation:** Message 1–2000 chars, type restricted to `bug` / `feature` / `general`, optional email.
+- **Self-Service UI:** `frontend/feedback.html` — user-facing form with live char counter, spinner loading, success/error feedback.
+- **Admin UI:** `frontend/feedback-admin.html` — filterable table with inline status updates (uses admin JWT from login).
+- **Persistence:** Bind mount `./backend/backups:/app/backups` survives container restarts.
+
+---
+
+## 🚘 Phase 7: Passenger Identity & Vehicle Registry
 - **Passwordless OTP Auth:** Phone-based SMS verification.
 - **Commuter JWT:** Token cached in `localStorage`.
 - **Saved Vehicle Registry:** Auto-saves plate + province + vehicle type (car/motorcycle) to `user_vehicles`.
@@ -83,7 +94,7 @@ Core capabilities of the Smart Park & Ride system, grouped by phase.
 | **Session** | Booking tied to `localStorage` (1 device) |
 | **Testing** | 4 test files, zero frontend tests |
 | **Monitoring** | No Sentry, no uptime monitoring |
-| **Backup** | No automated DB backup/restore |
+| **Backup** | Manual via `python backup.py` (pg_dump installed in container) |
 | **UI framework** | Vanilla JS — maintenance scales poorly |
 | **Thai plate** | Regex strips vowels/tones (e.g., เพ, แก) |
 | **Payment** | No billing or receipt system |

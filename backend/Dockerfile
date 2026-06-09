@@ -26,6 +26,10 @@ RUN groupadd -g 10001 appgroup && \
     useradd -u 10001 -g appgroup -d /app -s /bin/bash appuser && \
     chown -R appuser:appgroup /app
 
+# Install PostgreSQL client (pg_dump, pg_isready, etc.) for database backups
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
+
 # Switch context to the non-root user
 USER appuser
 

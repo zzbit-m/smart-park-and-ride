@@ -21,6 +21,8 @@ python -m http.server 5500
 ```
 - **Rider Portal:** `http://localhost:5500/index.html`
 - **Operator Dashboard:** `http://localhost:5500/admin.html`
+- **Feedback Form:** `http://localhost:5500/feedback.html`
+- **Feedback Admin:** `http://localhost:5500/feedback-admin.html`
 
 ### 3. Default Credentials
 | Role | Username | Password |

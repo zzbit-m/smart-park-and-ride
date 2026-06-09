@@ -41,6 +41,8 @@ python -m http.server 5500
 Open the interfaces in your browser:
 * **Rider portal:** `http://localhost:5500/index.html`
 * **Operator console:** `http://localhost:5500/admin.html`
+* **Feedback form:** `http://localhost:5500/feedback.html`
+* **Feedback admin:** `http://localhost:5500/feedback-admin.html`
 
 ---
 

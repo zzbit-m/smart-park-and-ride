@@ -11,7 +11,6 @@ verify_admin_token (FastAPI dependency)
 """
 
 import hmac
-import hashlib
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel
@@ -24,6 +23,7 @@ from config import settings
 from services.jwt_helper import create_access_token, decode_access_token
 from services.audit import log_audit
 from services.analytics_service import get_export_summary
+from services.password_utils import verify_password
 from datetime import date
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -54,10 +54,10 @@ async def admin_login(body: LoginRequest):
     Credentials are compared in constant time to prevent timing attacks.
     """
     admin_username_ok = hmac.compare_digest(body.username, _ADMIN_USERNAME)
-    admin_password_ok = hmac.compare_digest(body.password, _ADMIN_PASSWORD)
+    admin_password_ok = verify_password(body.password, _ADMIN_PASSWORD)
 
     operator_username_ok = hmac.compare_digest(body.username, settings.OPERATOR_USERNAME)
-    operator_password_ok = hmac.compare_digest(body.password, settings.OPERATOR_PASSWORD)
+    operator_password_ok = verify_password(body.password, settings.OPERATOR_PASSWORD)
 
     if admin_username_ok and admin_password_ok:
         role = "admin"
