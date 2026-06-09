@@ -16,6 +16,7 @@ const API_SCAN_OUT = `${API_BASE}/api/slots/scan-out`;
 const API_MANUAL_RELEASE = `${API_BASE}/api/slots/manual-release`;
 const API_STATS = `${API_BASE}/api/admin/stats`;
 const API_ANALYTICS = `${API_BASE}/api/slots/analytics`;
+const API_EXPORT_SUMMARY = `${API_BASE}/api/admin/export/summary`;
 
 const TOKEN_KEY = 'adminToken';
 
@@ -721,7 +722,7 @@ function initTabNav() {
     if (!isScanner && _cameraActive) stopCamera();
 
     // If entering dashboard → fetch fresh stats
-    if (!isScanner) fetchStats();
+    if (!isScanner) { fetchStats(); fetchSummary(); }
   }
 
   tabScanner.addEventListener('click',   () => activateTab(tabScanner));
@@ -765,6 +766,28 @@ function initDashboard() {
   buildChart({ total: 0, available: 0, held: 0, occupied: 0 });
   buildPeakHoursChart([]);
   buildDailyTrafficChart([]);
+
+  // Set default date input to today
+  const dateInput = getEl('summary-date');
+  if (dateInput) {
+    dateInput.value = new Date().toISOString().slice(0, 10);
+    dateInput.addEventListener('change', fetchSummary);
+  }
+
+  const rangeSelect = getEl('summary-range');
+  if (rangeSelect) {
+    rangeSelect.addEventListener('change', fetchSummary);
+  }
+
+  const summaryBtn = getEl('summary-refresh-btn');
+  if (summaryBtn) {
+    summaryBtn.addEventListener('click', fetchSummary);
+  }
+
+  const downloadBtn = getEl('summary-download-btn');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', downloadSummary);
+  }
 
   // Start auto-refresh (only ticks; actual fetch triggered on tab switch)
   _dashRefreshTimer = setInterval(() => {
@@ -835,6 +858,91 @@ async function fetchStats() {
   } catch (err) {
     console.error('[Dashboard] Network error:', err);
     if (lastUpdatedEl) lastUpdatedEl.textContent = '🔌 เชื่อมต่อ Server ไม่ได้';
+  }
+}
+
+/* ── Fetch export summary ── */
+async function fetchSummary() {
+  const dateInput = getEl('summary-date');
+  const rangeSelect = getEl('summary-range');
+  const d = dateInput ? dateInput.value : new Date().toISOString().slice(0, 10);
+  const r = rangeSelect ? rangeSelect.value : 'day';
+  if (!d) return;
+
+  try {
+    const res = await fetch(`${API_EXPORT_SUMMARY}?d=${d}&r=${r}`, {
+      method: 'GET',
+      headers: authHeaders(),
+    });
+
+    if (res.status === 401) { handle401(); return; }
+    if (!res.ok) return;
+
+    const data = await res.json();
+
+    const setTxt = (id, val) => { const el = getEl(id); if (el) el.textContent = val; };
+
+    const subtitle = getEl('summary-subtitle');
+    if (subtitle) subtitle.textContent = `${data.range || r} — ${data.date || d}`;
+
+    setTxt('summary-total-cars', data.total_cars ?? '—');
+    setTxt('summary-total-motorcycles', data.total_motorcycles ?? '—');
+    setTxt('summary-avg-duration', data.average_duration_minutes != null ? `${data.average_duration_minutes.toFixed(1)} m` : '—');
+    setTxt('summary-occupancy', data.occupancy_rate != null ? `${(data.occupancy_rate * 100).toFixed(1)}%` : '—');
+
+    if (data.peak_hour) {
+      setTxt('summary-peak-hour', `${String(data.peak_hour.hour).padStart(2, '0')}:00 (${data.peak_hour.count})`);
+    } else {
+      setTxt('summary-peak-hour', '—');
+    }
+
+    if (data.slot_utilization && data.slot_utilization.length > 0) {
+      const top = data.slot_utilization[0];
+      setTxt('summary-top-slot', `${top.slot_id} (${top.usage_count})`);
+    } else {
+      setTxt('summary-top-slot', '—');
+    }
+  } catch (err) {
+    console.error('[Summary] Fetch error:', err);
+  }
+}
+
+/* ── Download summary as JSON file ── */
+async function downloadSummary() {
+  const dateInput = getEl('summary-date');
+  const rangeSelect = getEl('summary-range');
+  const d = dateInput ? dateInput.value : new Date().toISOString().slice(0, 10);
+  const r = rangeSelect ? rangeSelect.value : 'day';
+  if (!d) return;
+
+  const btn = getEl('summary-download-btn');
+  const originalText = btn ? btn.innerHTML : '';
+  if (btn) btn.innerHTML = '⏳';
+
+  try {
+    const res = await fetch(`${API_EXPORT_SUMMARY}?d=${d}&r=${r}`, {
+      method: 'GET',
+      headers: authHeaders(),
+    });
+
+    if (res.status === 401) { handle401(); return; }
+    if (!res.ok) return;
+
+    const data = await res.json();
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `parking_summary_${r}_${d}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('[Summary] Download error:', err);
+  } finally {
+    if (btn) btn.innerHTML = originalText;
   }
 }
 

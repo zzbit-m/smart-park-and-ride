@@ -12,9 +12,14 @@ This guide outlines the process to launch, configure, and verify the Smart Park 
 
 ## 🚀 1. Infrastructure Execution
 
-From the repository root, start the main backend infrastructure:
+From the repository root, build and start the main backend infrastructure:
+
 ```bash
+# Foreground mode (logs in terminal, Ctrl+C to stop):
 docker-compose up --build
+
+# Detached mode (runs in background):
+docker-compose up --build -d
 ```
 
 This starts four services:
@@ -36,6 +41,8 @@ python -m http.server 5500
 Open the interfaces in your browser:
 * **Rider portal:** `http://localhost:5500/index.html`
 * **Operator console:** `http://localhost:5500/admin.html`
+* **Feedback form:** `http://localhost:5500/feedback.html`
+* **Feedback admin:** `http://localhost:5500/feedback-admin.html`
 
 ---
 
@@ -72,6 +79,13 @@ Ensure all backend connections are healthy by querying the health check route:
 curl http://localhost:8000/health
 ```
 A successful response returns: `{"status":"ok"}`
+
+### Run Database Migrations
+
+After starting the services, apply any pending Alembic migrations:
+```bash
+docker-compose exec backend alembic upgrade head
+```
 
 ### Seed Initial Data
 Populate the database with sample slot information.

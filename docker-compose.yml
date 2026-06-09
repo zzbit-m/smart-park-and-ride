@@ -6,7 +6,7 @@ services:
     container_name: parking_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-parking_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-parking_pass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-parking_db}
     ports:
       - "5432:5432"
@@ -38,12 +38,12 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-parking_user}:${POSTGRES_PASSWORD:-parking_pass}@postgres:5432/${POSTGRES_DB:-parking_db}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      ADMIN_USERNAME: ${ADMIN_USERNAME}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       # Comma-separated list of allowed frontend origins.
       # Override in production: CORS_ALLOWED_ORIGINS=https://your-app.example.com
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5500,http://127.0.0.1:5500,http://localhost:5173,http://127.0.0.1:5173}
 
+    volumes:
+      - ./backend/backups:/app/backups
 
     depends_on:
       postgres:
@@ -64,8 +64,6 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-parking_user}:${POSTGRES_PASSWORD:-parking_pass}@postgres:5432/${POSTGRES_DB:-parking_db}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      ADMIN_USERNAME: ${ADMIN_USERNAME}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy

@@ -458,11 +458,16 @@ async def hold_slot(
     license_plate: str,
     province: str,
     user_id: str,
-    actor: str
+    actor: str,
+    vehicle_type: str = "car"
 ) -> dict:
     """Hold a slot for 15 minutes (atomic Redis lock + PostgreSQL booking row)."""
     plate = license_plate.strip().upper()
     prov = province.strip()
+    vtype = vehicle_type.strip().lower()
+    if vtype not in ("car", "motorcycle"):
+        logger.warning(f"Hold booking failed: invalid vehicle_type '{vehicle_type}' for slot_id={slot_id}")
+        raise HTTPException(status_code=422, detail="vehicle_type must be 'car' or 'motorcycle'")
     if not plate:
         logger.warning(f"Hold booking failed: license_plate missing for slot_id={slot_id}")
         raise HTTPException(status_code=422, detail="license_plate is required")
@@ -553,9 +558,9 @@ async def hold_slot(
         await db.execute(
             text("""
                 INSERT INTO bookings
-                    (id, user_id, slot_id, status, qr_token, license_plate, held_at, expires_at)
+                    (id, user_id, slot_id, status, qr_token, license_plate, vehicle_type, held_at, expires_at)
                 VALUES
-                    (:id, :user_id, :slot_id, 'held', :qr_token, :license_plate, now(), :expires_at)
+                    (:id, :user_id, :slot_id, 'held', :qr_token, :license_plate, :vehicle_type, now(), :expires_at)
             """),
             {
                 "id": booking_id,
@@ -563,6 +568,7 @@ async def hold_slot(
                 "slot_id": slot_id,
                 "qr_token": qr_token,
                 "license_plate": plate,
+                "vehicle_type": vtype,
                 "expires_at": expires_at,
             },
         )
@@ -570,14 +576,15 @@ async def hold_slot(
         # Save vehicle into user registry
         await db.execute(
             text("""
-                INSERT INTO user_vehicles (user_id, license_plate, province)
-                VALUES (:user_id, :license_plate, :province)
+                INSERT INTO user_vehicles (user_id, license_plate, province, vehicle_type)
+                VALUES (:user_id, :license_plate, :province, :vehicle_type)
                 ON CONFLICT (user_id, license_plate, province) DO NOTHING
             """),
             {
                 "user_id": user_id,
                 "license_plate": plate,
                 "province": prov,
+                "vehicle_type": vtype,
             },
         )
         
@@ -589,7 +596,7 @@ async def hold_slot(
         raise
 
     await set_qr_token_lookup(qr_token, slot_id, ttl_seconds=HOLD_TTL_SECONDS)
-    log_audit(actor, "hold_slot", f"Created hold for slot_id={slot_id} (confidential plate)")
+    log_audit(actor, "hold_slot", f"Created hold for slot_id={slot_id} vehicle_type={vtype} (confidential plate)")
     logger.info(f"Created hold booking: booking_id={booking_id}, slot_id={slot_id}, expires_at='{expires_at.isoformat()}'")
 
     return {

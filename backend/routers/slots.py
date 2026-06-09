@@ -22,6 +22,7 @@ class SlotOut(BaseModel):
 class HoldRequest(BaseModel):
     license_plate: str
     province: str = "กรุงเทพมหานคร"
+    vehicle_type: str = "car"
 
 
 class HoldResponse(BaseModel):
@@ -196,6 +197,7 @@ async def hold_slot_endpoint(
         slot_id,
         body.license_plate,
         province=body.province,
+        vehicle_type=body.vehicle_type,
         user_id=user_id,
         actor="driver"
     )

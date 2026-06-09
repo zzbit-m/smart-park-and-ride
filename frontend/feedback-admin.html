@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Park & Ride — Feedback Admin</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .admin-feedback { max-width: 900px; margin: 2rem auto; padding: 1rem; }
+    h1 { text-align: center; }
+    .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; align-items: center; }
+    .filters select, .filters input { padding: 0.4rem; border-radius: 4px; border: 1px solid #444; background: #1e1e1e; color: #eee; }
+    .filters button { padding: 0.4rem 1rem; border: none; border-radius: 4px; background: #1565c0; color: #fff; cursor: pointer; }
+    .filters button:hover { background: #1976d2; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { padding: 0.6rem; text-align: left; border-bottom: 1px solid #333; }
+    th { background: #1e1e1e; color: #90caf9; }
+    .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
+    .status-open { background: #e65100; color: #fff; }
+    .status-reviewed { background: #1565c0; color: #fff; }
+    .status-closed { background: #2e7d32; color: #fff; }
+    .status-select { padding: 0.3rem; border-radius: 4px; border: 1px solid #444; background: #1e1e1e; color: #eee; }
+    .save-btn { padding: 0.3rem 0.6rem; border: none; border-radius: 4px; background: #4caf50; color: #fff; cursor: pointer; }
+    .save-btn:hover { background: #43a047; }
+    .msg { padding: 0.7rem; border-radius: 6px; display: none; margin: 1rem 0; }
+    .msg.success { display: block; background: #1b5e20; color: #c8e6c9; }
+    .msg.error { display: block; background: #b71c1c; color: #ffcdd2; }
+    .pagination { margin-top: 1rem; text-align: center; color: #888; }
+    .no-data { text-align: center; color: #888; padding: 2rem; }
+    .back-link { display: block; text-align: center; margin-top: 1rem; color: #81d4fa; }
+    td.message-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td.message-cell:hover { overflow: visible; white-space: normal; position: relative; background: #1a1a1a; z-index: 1; }
+  </style>
+</head>
+<body>
+  <div class="admin-feedback">
+    <h1>Feedback Management</h1>
+
+    <div class="filters">
+      <label for="filterStatus">Status:</label>
+      <select id="filterStatus">
+        <option value="">All</option>
+        <option value="open">Open</option>
+        <option value="reviewed">Reviewed</option>
+        <option value="closed">Closed</option>
+      </select>
+
+      <label for="filterType">Type:</label>
+      <select id="filterType">
+        <option value="">All</option>
+        <option value="bug">Bug</option>
+        <option value="feature">Feature</option>
+        <option value="general">General</option>
+      </select>
+
+      <button id="refreshBtn">Refresh</button>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <div id="feedbackTableContainer">
+      <p class="no-data">Loading feedback entries...</p>
+    </div>
+
+    <div id="pagination" class="pagination"></div>
+
+    <a href="admin.html" class="back-link">&larr; Back to admin panel</a>
+  </div>
+
+  <script src="feedback-admin.js"></script>
+</body>
+</html>

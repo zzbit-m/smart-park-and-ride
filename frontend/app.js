@@ -58,10 +58,10 @@ function getStoredActiveBooking() {
   }
 }
 
-function saveStoredActiveBooking({ booking_id, slot_id, slot_code, qr_token, expires_at, license_plate }) {
+function saveStoredActiveBooking({ booking_id, slot_id, slot_code, qr_token, expires_at, license_plate, vehicle_type }) {
   localStorage.setItem(
     ACTIVE_BOOKING_KEY,
-    JSON.stringify({ booking_id, slot_id, slot_code, qr_token, expires_at, license_plate })
+    JSON.stringify({ booking_id, slot_id, slot_code, qr_token, expires_at, license_plate, vehicle_type })
   );
 }
 
@@ -93,6 +93,7 @@ function reopenTicketFromStorage() {
     expiresAt: new Date(booking.expires_at),
     qrToken: booking.qr_token,
     licensePlate: booking.license_plate,
+    vehicleType: booking.vehicle_type,
   };
   state.parkedSlot = booking.slot_code;
 
@@ -102,11 +103,12 @@ function reopenTicketFromStorage() {
     qr_token: booking.qr_token,
     expires_at: booking.expires_at,
     license_plate: booking.license_plate,
+    vehicle_type: booking.vehicle_type,
   });
 }
 
 // ── BOOKING TICKET MODAL ──
-function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at, license_plate }) {
+function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at, license_plate, vehicle_type }) {
   const modal = document.getElementById('ticket-modal');
   const expiresAt = new Date(expires_at);
 
@@ -128,6 +130,18 @@ function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at, l
       plateRow.hidden = false;
     } else {
       plateRow.hidden = true;
+    }
+  }
+
+  // Show / hide vehicle type detail row
+  const vtRow = document.getElementById('ticket-vehicle-type-row');
+  const vtEl = document.getElementById('ticket-vehicle-type');
+  if (vtRow && vtEl) {
+    if (vehicle_type) {
+      vtEl.textContent = vehicle_type === 'motorcycle' ? '🏍️ มอเตอร์ไซค์' : '🚗 รถยนต์';
+      vtRow.hidden = false;
+    } else {
+      vtRow.hidden = true;
     }
   }
 
@@ -227,8 +241,10 @@ function initTicketModal() {
 // ── LICENSE PLATE MODAL ──
 let _pendingHoldSlotId = null;
 let _pendingHoldSlotCode = null;
+let _savedVehiclesData = [];
 
 function renderSavedVehiclesList(vehicles) {
+  _savedVehiclesData = vehicles;
   const listContainer = document.getElementById('plate-saved-vehicles-list');
   const selectionInput = document.getElementById('plate-saved-vehicles');
   if (!listContainer || !selectionInput) return;
@@ -246,10 +262,12 @@ function renderSavedVehiclesList(vehicles) {
       item.classList.add('selected');
     }
 
+    const vtIcon = v.vehicle_type === 'motorcycle' ? '🏍️' : '🚗';
+    const vtLabel = v.vehicle_type === 'motorcycle' ? 'มอเตอร์ไซค์' : 'รถยนต์';
     item.innerHTML = `
       <div class="saved-vehicle-info">
         <span class="saved-vehicle-plate">${v.license_plate}</span>
-        <span class="saved-vehicle-province">${v.province}</span>
+        <span class="saved-vehicle-province">${v.province} · ${vtIcon} ${vtLabel}</span>
       </div>
       <button type="button" class="saved-vehicle-delete-btn" title="ลบประวัติรถ">
         🗑️
@@ -403,6 +421,11 @@ async function openPlateModal(slotId, slotCode) {
   requestOtpBtn.disabled = true;
   verifyOtpBtn.disabled = true;
   if (selectionInput) selectionInput.value = 'new';
+
+  // Reset vehicle type to car
+  document.querySelectorAll('.vehicle-type-option').forEach(o => o.classList.remove('selected'));
+  document.querySelector('.vehicle-type-option[data-vehicle-type="car"]').classList.add('selected');
+  document.querySelector('input[name="vehicle-type"][value="car"]').checked = true;
 
   // Hide otp input block
   document.getElementById('otp-input-wrap').style.display = 'none';
@@ -574,6 +597,15 @@ function initPlateModal() {
     syncModalFieldsVisibility();
   });
 
+  // Vehicle type toggle click
+  document.querySelectorAll('.vehicle-type-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      document.querySelectorAll('.vehicle-type-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      opt.querySelector('input[type="radio"]').checked = true;
+    });
+  });
+
   // Monitor phone input
   phoneInp.addEventListener('input', () => {
     phoneInp.value = phoneInp.value.replace(/[^0-9+]/g, '');
@@ -670,25 +702,34 @@ function initPlateModal() {
     const isNewVehicle = savedVehiclesSelect.value === 'new';
     let licensePlate = '';
     let province = '';
+    let vehicleType = 'car';
 
     const userToken = localStorage.getItem('userToken');
     if (userToken && !isNewVehicle) {
       const [plateVal, provVal] = savedVehiclesSelect.value.split('|');
       licensePlate = plateVal;
       province = provVal;
+      // Find vehicle_type from the saved vehicles list
+      const selectedVehicle = _savedVehiclesData.find(v => `${v.license_plate}|${v.province}` === savedVehiclesSelect.value);
+      if (selectedVehicle) {
+        vehicleType = selectedVehicle.vehicle_type || 'car';
+      }
     } else {
       const lettersVal = lettersInp.value.trim();
       const numberVal = numberInp.value.trim();
       province = provinceInp.value;
       if (!lettersVal || !numberVal || !province) return;
       licensePlate = `${lettersVal} ${numberVal}`;
+      // Read vehicle type from toggle
+      const selectedType = document.querySelector('input[name="vehicle-type"]:checked');
+      vehicleType = selectedType ? selectedType.value : 'car';
     }
 
     const slotId = _pendingHoldSlotId;
     const slotCode = _pendingHoldSlotCode;
 
     closePlateModal();
-    await holdSlot(slotId, slotCode, licensePlate, province);
+    await holdSlot(slotId, slotCode, licensePlate, province, vehicleType);
   });
 }
 
@@ -851,7 +892,7 @@ function makeSlotEl(slot) {
 }
 
 // ── HOLD A SLOT ──
-async function holdSlot(slotId, slotCode, licensePlate, province) {
+async function holdSlot(slotId, slotCode, licensePlate, province, vehicleType) {
   if (hasActiveStoredBooking()) {
     alert('คุณมีการจองที่กำลังใช้งานอยู่แล้ว (You already have an active booking)');
     return;
@@ -869,7 +910,7 @@ async function holdSlot(slotId, slotCode, licensePlate, province) {
     const res = await fetch(`${API}/api/slots/${slotId}/hold`, {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify({ license_plate: licensePlate, province: province }),
+      body: JSON.stringify({ license_plate: licensePlate, province: province, vehicle_type: vehicleType || 'car' }),
     });
 
     if (res.status === 400 || res.status === 409) {
@@ -882,6 +923,7 @@ async function holdSlot(slotId, slotCode, licensePlate, province) {
 
     const data = await res.json();
 
+    const vt = vehicleType || 'car';
     saveStoredActiveBooking({
       booking_id: data.booking_id,
       slot_id: data.slot_id,
@@ -889,6 +931,7 @@ async function holdSlot(slotId, slotCode, licensePlate, province) {
       qr_token: data.qr_token,
       expires_at: data.expires_at,
       license_plate: licensePlate,
+      vehicle_type: vt,
     });
 
     state.activeBooking = {
@@ -897,6 +940,7 @@ async function holdSlot(slotId, slotCode, licensePlate, province) {
       slotCode: data.slot_code,
       expiresAt: new Date(data.expires_at),
       qrToken: data.qr_token,
+      vehicleType: vt,
     };
     state.parkedSlot = data.slot_code;
 
@@ -908,6 +952,7 @@ async function holdSlot(slotId, slotCode, licensePlate, province) {
       qr_token: data.qr_token,
       expires_at: data.expires_at,
       license_plate: licensePlate,
+      vehicle_type: vt,
     });
 
     showToast('✓ จองสำเร็จ');

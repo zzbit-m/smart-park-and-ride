@@ -38,7 +38,7 @@ Core capabilities of the Smart Park & Ride system, grouped by phase.
 ## 🖥️ Phase 4: Operator & Rider Experience
 - **Analytics Dashboard:** Occupancy, average check-in time, expired trends.
 - **Camera QR Scanner:** Client-side webcam scan for check-in/check-out.
-- **License Plate Capture:** Plate + province associated with each hold.
+- **License Plate Capture:** Plate + province + vehicle type (car/motorcycle) associated with each hold.
 - **Client-Side QR Rendering:** Offline-capable via `qrious.min.js`.
 
 ---
@@ -52,10 +52,33 @@ Core capabilities of the Smart Park & Ride system, grouped by phase.
 
 ---
 
-## 🚘 Phase 6: Passenger Identity & Vehicle Registry
+## 📊 Phase 7: Analytics & Business Insights
+- **Admin Export Summary:** `GET /api/admin/export/summary` — aggregated daily/weekly/monthly insights with car vs motorcycle breakdown.
+- **SQL Aggregation:** Uses `GROUP BY` and `BETWEEN` for efficient time-range queries (no Python loops).
+- **Three-Layer Separation:** Repository (SQL) → Service (logic) → Router (endpoint) for clean maintainability.
+- **Day / Week / Month Ranges:** Date picker + range selector in the admin Dashboard card.
+- **Downloadable JSON:** One-click download of aggregated summary as a formatted JSON file.
+- **Occupancy Rate:** `unique_slots_used / total_slots` derived from `parking_zones.total_slots`.
+- **Peak Hour Detection:** Derives busiest hour from hourly distribution in a single pass.
+- **Slot Utilization Ranking:** `slot_code` + `usage_count` sorted descending.
+
+---
+
+## 💬 Phase 6: User Feedback System
+- **Submit Feedback:** `POST /api/feedback/` — accepts bug, feature, general requests (rate-limited, 10/min).
+- **Admin Review Panel:** `GET /api/feedback/` with `?status=`, `?type=`, pagination (`?limit=`, `?offset=`).
+- **Status Management:** `PATCH /api/feedback/{id}` — update status: open → reviewed → closed (404 on missing).
+- **Validation:** Message 1–2000 chars, type restricted to `bug` / `feature` / `general`, optional email.
+- **Self-Service UI:** `frontend/feedback.html` — user-facing form with live char counter, spinner loading, success/error feedback.
+- **Admin UI:** `frontend/feedback-admin.html` — filterable table with inline status updates (uses admin JWT from login).
+- **Persistence:** Bind mount `./backend/backups:/app/backups` survives container restarts.
+
+---
+
+## 🚘 Phase 7: Passenger Identity & Vehicle Registry
 - **Passwordless OTP Auth:** Phone-based SMS verification.
 - **Commuter JWT:** Token cached in `localStorage`.
-- **Saved Vehicle Registry:** Auto-saves plate + province to `user_vehicles`.
+- **Saved Vehicle Registry:** Auto-saves plate + province + vehicle type (car/motorcycle) to `user_vehicles`.
 - **One-Click Bookings:** Saved vehicles load instantly on modal open.
 - **Vehicle Deletion UI:** Delete saved plates from the booking modal.
 - **No-Show Penalty:** 3 strikes → 24-hour ban.
@@ -71,7 +94,7 @@ Core capabilities of the Smart Park & Ride system, grouped by phase.
 | **Session** | Booking tied to `localStorage` (1 device) |
 | **Testing** | 4 test files, zero frontend tests |
 | **Monitoring** | No Sentry, no uptime monitoring |
-| **Backup** | No automated DB backup/restore |
+| **Backup** | Manual via `python backup.py` (pg_dump installed in container) |
 | **UI framework** | Vanilla JS — maintenance scales poorly |
 | **Thai plate** | Regex strips vowels/tones (e.g., เพ, แก) |
 | **Payment** | No billing or receipt system |

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Park & Ride — Feedback</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .feedback-form { max-width: 500px; margin: 2rem auto; padding: 1.5rem; }
+    .feedback-form label { display: block; margin-top: 1rem; font-weight: 600; }
+    .feedback-form select,
+    .feedback-form textarea,
+    .feedback-form input { width: 100%; padding: 0.6rem; margin-top: 0.3rem; border-radius: 6px; border: 1px solid #444; background: #1e1e1e; color: #eee; }
+    .feedback-form textarea { min-height: 120px; resize: vertical; }
+    .feedback-form button { margin-top: 1.2rem; width: 100%; padding: 0.7rem; border: none; border-radius: 6px; background: #4caf50; color: #fff; font-size: 1rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+    .feedback-form button:hover { background: #43a047; }
+    .feedback-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .feedback-form button.loading { pointer-events: none; opacity: 0.8; }
+    .spinner { display: none; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; }
+    .spinner.visible { display: inline-block; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .feedback-form .msg { margin-top: 1rem; padding: 0.7rem; border-radius: 6px; display: none; }
+    .feedback-form .msg.success { display: block; background: #1b5e20; color: #c8e6c9; }
+    .feedback-form .msg.error { display: block; background: #b71c1c; color: #ffcdd2; }
+    .feedback-form .char-count { text-align: right; font-size: 0.8rem; color: #888; margin-top: 0.2rem; }
+    h1 { text-align: center; margin-top: 2rem; }
+    .back-link { display: block; text-align: center; margin-top: 1rem; color: #81d4fa; }
+  </style>
+</head>
+<body>
+  <div class="feedback-form">
+    <h1>Send Feedback</h1>
+    <p style="text-align:center;color:#aaa;">Report a bug, request a feature, or share a general suggestion.</p>
+
+    <form id="feedbackForm">
+      <label for="type">Type</label>
+      <select id="type" required>
+        <option value="bug">Bug Report</option>
+        <option value="feature">Feature Request</option>
+        <option value="general">General Feedback</option>
+      </select>
+
+      <label for="message">Message <span style="color:#ef5350;">*</span></label>
+      <textarea id="message" placeholder="Describe your issue or suggestion..." maxlength="2000" required></textarea>
+      <div class="char-count"><span id="charCount">0</span> / 2000</div>
+
+      <label for="email">Email <small style="color:#888;">(optional — for follow-up)</small></label>
+      <input type="email" id="email" placeholder="you@example.com">
+
+      <button type="submit" id="submitBtn"><span class="spinner" id="btnSpinner"></span><span id="btnText">Submit Feedback</span></button>
+    </form>
+
+    <div id="resultMsg" class="msg"></div>
+    <a href="index.html" class="back-link">&larr; Back to parking</a>
+  </div>
+
+  <script src="feedback.js"></script>
+</body>
+</html>

@@ -114,8 +114,15 @@ def run_backup(upload_to_s3_enabled: bool = False) -> Path:
         env["PGPASSWORD"] = connection_info["password"]
 
     logger.info("Starting database backup to %s", backup_file)
-    subprocess.run(cmd, check=True, env=env)
-    logger.info("Backup completed successfully")
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.error(
+            "pg_dump failed (exit %d):\n%s",
+            result.returncode,
+            result.stderr.strip(),
+        )
+        raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+    logger.info("Backup completed successfully (%.1f MB)", backup_file.stat().st_size / 1_000_000)
 
     cleanup_old_backups(backup_dir)
 

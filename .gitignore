@@ -181,3 +181,4 @@ cython_debug/
 .cursorindexingignore
 # Frontend runtime config (machine-specific, do not commit)
 frontend/config.js
+backend/backups/
