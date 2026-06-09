@@ -191,8 +191,17 @@ async function cancelBookingFromModal() {
     return;
   }
 
+  const headers = {};
+  const userToken = localStorage.getItem('userToken');
+  if (userToken) {
+    headers['Authorization'] = `Bearer ${userToken}`;
+  }
+
   try {
-    const res = await fetch(`${API}/api/slots/${slotId}/hold?qr_token=${encodeURIComponent(booking.qr_token)}`, { method: 'DELETE' });
+    const res = await fetch(`${API}/api/slots/${slotId}/hold?qr_token=${encodeURIComponent(booking.qr_token)}`, {
+      method: 'DELETE',
+      headers: headers
+    });
     if (!res.ok) throw new Error(`Cancel failed (${res.status})`);
 
     clearStoredActiveBooking();
@@ -219,7 +228,7 @@ function initTicketModal() {
 let _pendingHoldSlotId = null;
 let _pendingHoldSlotCode = null;
 
-function openPlateModal(slotId, slotCode) {
+async function openPlateModal(slotId, slotCode) {
   _pendingHoldSlotId = slotId;
   _pendingHoldSlotCode = slotCode;
 
@@ -227,22 +236,189 @@ function openPlateModal(slotId, slotCode) {
   const lettersInp = document.getElementById('plate-letters');
   const numberInp = document.getElementById('plate-number');
   const provinceInp = document.getElementById('plate-province');
+  const phoneInp = document.getElementById('plate-phone');
+  const otpInp = document.getElementById('plate-otp');
   const hint = document.getElementById('plate-input-hint');
+  const otpHint = document.getElementById('otp-input-hint');
   const confirm = document.getElementById('plate-confirm-btn');
+  const requestOtpBtn = document.getElementById('plate-otp-request-btn');
+  const verifyOtpBtn = document.getElementById('plate-otp-verify-btn');
+  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
 
   // Reset state
   lettersInp.value = '';
   numberInp.value = '';
   provinceInp.value = '';
+  phoneInp.value = '';
+  otpInp.value = '';
   hint.textContent = '';
   hint.className = 'plate-input-hint';
+  otpHint.textContent = '';
   confirm.disabled = true;
+  requestOtpBtn.disabled = true;
+  verifyOtpBtn.disabled = true;
+
+  // Hide otp input block
+  document.getElementById('otp-input-wrap').style.display = 'none';
 
   modal.hidden = false;
   modal.setAttribute('aria-hidden', 'false');
 
-  // Focus the first input after animation
-  setTimeout(() => lettersInp.focus(), 80);
+  // Check if authenticated
+  const userToken = localStorage.getItem('userToken');
+  if (userToken) {
+    try {
+      // Fetch saved vehicles
+      const res = await fetch(`${API}/api/users/vehicles`, {
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      if (res.status === 401) {
+        throw new Error('Unauthorized');
+      }
+      const vehicles = await res.json();
+      
+      // Populate select
+      savedVehiclesSelect.innerHTML = '<option value="new">+ ระบุทะเบียนรถใหม่ (Enter new plate)</option>';
+      vehicles.forEach(v => {
+        const option = document.createElement('option');
+        option.value = `${v.license_plate}|${v.province}`;
+        option.textContent = `${v.license_plate} (${v.province})`;
+        savedVehiclesSelect.appendChild(option);
+      });
+
+      // Show saved vehicles selection
+      document.getElementById('saved-vehicles-wrap').style.display = 'block';
+      // Hide phone entry since we are logged in
+      document.getElementById('phone-input-wrap').style.display = 'none';
+      
+      // Select the first saved vehicle if it exists
+      if (vehicles.length > 0) {
+        savedVehiclesSelect.value = `${vehicles[0].license_plate}|${vehicles[0].province}`;
+      } else {
+        savedVehiclesSelect.value = 'new';
+      }
+    } catch (err) {
+      console.warn('Failed to load saved vehicles, falling back to login:', err);
+      localStorage.removeItem('userToken');
+      // Hide saved vehicles select
+      document.getElementById('saved-vehicles-wrap').style.display = 'none';
+      // Show phone entry
+      document.getElementById('phone-input-wrap').style.display = 'block';
+    }
+  } else {
+    // Hide saved vehicles select
+    document.getElementById('saved-vehicles-wrap').style.display = 'none';
+    // Show phone entry
+    document.getElementById('phone-input-wrap').style.display = 'block';
+  }
+
+  // Initial visibility sync
+  syncModalFieldsVisibility();
+  
+  // Focus the phone input or manual letters input
+  setTimeout(() => {
+    if (document.getElementById('phone-input-wrap').style.display !== 'none') {
+      phoneInp.focus();
+    } else if (document.getElementById('manual-plate-wrap').style.display !== 'none') {
+      lettersInp.focus();
+    }
+  }, 80);
+}
+
+function syncModalFieldsVisibility() {
+  const userToken = localStorage.getItem('userToken');
+  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
+  const isNewVehicle = savedVehiclesSelect.value === 'new';
+
+  if (userToken) {
+    document.getElementById('phone-input-wrap').style.display = 'none';
+    document.getElementById('otp-input-wrap').style.display = 'none';
+    if (isNewVehicle) {
+      document.getElementById('manual-plate-wrap').style.display = 'block';
+    } else {
+      document.getElementById('manual-plate-wrap').style.display = 'none';
+    }
+  } else {
+    document.getElementById('saved-vehicles-wrap').style.display = 'none';
+    document.getElementById('phone-input-wrap').style.display = 'block';
+    document.getElementById('manual-plate-wrap').style.display = 'block';
+  }
+  
+  validateModalInputs();
+}
+
+function validateModalInputs() {
+  const confirm = document.getElementById('plate-confirm-btn');
+  const userToken = localStorage.getItem('userToken');
+  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
+  const hint = document.getElementById('plate-input-hint');
+
+  if (!userToken) {
+    confirm.disabled = true;
+    hint.textContent = 'กรุณากรอกเบอร์โทรศัพท์และยืนยัน OTP ก่อนทำการจอง';
+    hint.className = 'plate-input-hint error';
+    return;
+  }
+
+  const isNewVehicle = savedVehiclesSelect.value === 'new';
+  if (!isNewVehicle) {
+    // Valid saved vehicle is selected
+    confirm.disabled = false;
+    hint.textContent = '';
+    hint.className = 'plate-input-hint';
+    return;
+  }
+
+  // Validate manual inputs
+  const lettersInp = document.getElementById('plate-letters');
+  const numberInp = document.getElementById('plate-number');
+  const provinceInp = document.getElementById('plate-province');
+
+  const lettersVal = lettersInp.value.trim();
+  const numberVal = numberInp.value.trim();
+  const provinceVal = provinceInp.value;
+
+  const lettersOk = /^[1-9]?[ก-ฮ]+$/.test(lettersVal);
+  const numberOk = /^\d+$/.test(numberVal);
+  const provinceOk = provinceVal !== "";
+
+  if (lettersVal.length === 0 && numberVal.length === 0 && provinceVal === "") {
+    confirm.disabled = true;
+    hint.textContent = '';
+    hint.className = 'plate-input-hint';
+    return;
+  }
+
+  if (!lettersOk && lettersVal.length > 0) {
+    confirm.disabled = true;
+    hint.textContent = 'หมวดอักษรต้องเป็นภาษาไทย (สามารถมีตัวเลขนำหน้าได้ เช่น 1กข)';
+    hint.className = 'plate-input-hint error';
+    return;
+  }
+
+  if (!numberOk && numberVal.length > 0) {
+    confirm.disabled = true;
+    hint.textContent = 'เลขทะเบียนต้องเป็นตัวเลขเท่านั้น';
+    hint.className = 'plate-input-hint error';
+    return;
+  }
+
+  if (lettersOk && numberOk && provinceOk) {
+    const combined = `${lettersVal} ${numberVal} ${provinceVal}`;
+    if (combined.length > 20) {
+      confirm.disabled = true;
+      hint.textContent = 'ทะเบียนรถรวมต้องไม่เกิน 20 ตัวอักษร';
+      hint.className = 'plate-input-hint error';
+    } else {
+      confirm.disabled = false;
+      hint.textContent = '';
+      hint.className = 'plate-input-hint';
+    }
+  } else {
+    confirm.disabled = true;
+    hint.textContent = '';
+    hint.className = 'plate-input-hint';
+  }
 }
 
 function closePlateModal() {
@@ -257,79 +433,121 @@ function initPlateModal() {
   const lettersInp = document.getElementById('plate-letters');
   const numberInp = document.getElementById('plate-number');
   const provinceInp = document.getElementById('plate-province');
-  const hint = document.getElementById('plate-input-hint');
+  const phoneInp = document.getElementById('plate-phone');
+  const otpInp = document.getElementById('plate-otp');
+  const requestOtpBtn = document.getElementById('plate-otp-request-btn');
+  const verifyOtpBtn = document.getElementById('plate-otp-verify-btn');
+  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
+  const otpHint = document.getElementById('otp-input-hint');
   const confirm = document.getElementById('plate-confirm-btn');
 
-  function validateInputs() {
-    const lettersVal = lettersInp.value.trim();
-    const numberVal = numberInp.value.trim();
-    const provinceVal = provinceInp.value; // select value
-
-    const lettersOk = /^[1-9]?[ก-ฮ]+$/.test(lettersVal);
-    const numberOk = /^\d+$/.test(numberVal);
-    const provinceOk = provinceVal !== "";
-
-    if (lettersVal.length === 0 && numberVal.length === 0 && provinceVal === "") {
-      confirm.disabled = true;
-      hint.textContent = '';
-      hint.className = 'plate-input-hint';
-      return;
-    }
-
-    if (!lettersOk && lettersVal.length > 0) {
-      confirm.disabled = true;
-      hint.textContent = 'หมวดอักษรต้องเป็นภาษาไทย (สามารถมีตัวเลขนำหน้าได้ เช่น 1กข)';
-      hint.className = 'plate-input-hint error';
-      return;
-    }
-
-    if (!numberOk && numberVal.length > 0) {
-      confirm.disabled = true;
-      hint.textContent = 'เลขทะเบียนต้องเป็นตัวเลขเท่านั้น';
-      hint.className = 'plate-input-hint error';
-      return;
-    }
-
-    if (lettersOk && numberOk && provinceOk) {
-      const combined = `${lettersVal} ${numberVal} ${provinceVal}`;
-      if (combined.length > 20) {
-        confirm.disabled = true;
-        hint.textContent = 'ทะเบียนรถรวมต้องไม่เกิน 20 ตัวอักษร';
-        hint.className = 'plate-input-hint error';
-      } else {
-        confirm.disabled = false;
-        hint.textContent = '';
-        hint.className = 'plate-input-hint';
-      }
-    } else {
-      confirm.disabled = true;
-      hint.textContent = '';
-      hint.className = 'plate-input-hint';
-    }
-  }
-
-  // Live input filtering and validation
+  // Monitor manual plate entry changes
   lettersInp.addEventListener('input', () => {
     lettersInp.value = lettersInp.value.replace(/[^0-9ก-ฮ]/g, '');
     const match = lettersInp.value.match(/^([1-9]?)([ก-ฮ]*)/);
     lettersInp.value = match ? match[0] : '';
-    validateInputs();
+    validateModalInputs();
   });
 
   numberInp.addEventListener('input', () => {
     numberInp.value = numberInp.value.replace(/[^0-9]/g, '');
-    validateInputs();
+    validateModalInputs();
   });
 
   provinceInp.addEventListener('change', () => {
-    validateInputs();
+    validateModalInputs();
+  });
+
+  // Saved vehicles selection change
+  savedVehiclesSelect.addEventListener('change', () => {
+    syncModalFieldsVisibility();
+  });
+
+  // Monitor phone input
+  phoneInp.addEventListener('input', () => {
+    phoneInp.value = phoneInp.value.replace(/[^0-9+]/g, '');
+    const phoneVal = phoneInp.value.trim();
+    requestOtpBtn.disabled = !(phoneVal.length >= 9 && phoneVal.length <= 15 && /^\+?\d+$/.test(phoneVal));
+  });
+
+  // Request OTP click
+  requestOtpBtn.addEventListener('click', async () => {
+    const phone = phoneInp.value.trim();
+    showToast('กำลังส่ง OTP...');
+    try {
+      const res = await fetch(`${API}/api/auth/otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      if (!res.ok) throw new Error('Failed to request OTP');
+      const data = await res.json();
+      
+      showToast('ส่ง OTP เรียบร้อยแล้ว');
+      document.getElementById('otp-input-wrap').style.display = 'block';
+      otpInp.value = '';
+      verifyOtpBtn.disabled = true;
+      otpHint.textContent = '';
+      
+      // Auto-populate OTP for easier dev/testing if available
+      if (data.debug_otp) {
+        otpHint.textContent = `[Debug] OTP is: ${data.debug_otp}`;
+        otpHint.style.color = '#00e5a0';
+      }
+      
+      setTimeout(() => otpInp.focus(), 80);
+    } catch (err) {
+      console.error(err);
+      showToast('❌ ส่ง OTP ไม่สำเร็จ');
+    }
+  });
+
+  // Monitor OTP input
+  otpInp.addEventListener('input', () => {
+    otpInp.value = otpInp.value.replace(/[^0-9]/g, '');
+    verifyOtpBtn.disabled = otpInp.value.length !== 4;
+  });
+
+  // Verify OTP click
+  verifyOtpBtn.addEventListener('click', async () => {
+    const phone = phoneInp.value.trim();
+    const otp = otpInp.value.trim();
+    showToast('กำลังยืนยัน...');
+    try {
+      const res = await fetch(`${API}/api/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'OTP verification failed');
+      }
+      const data = await res.json();
+      
+      // Save token
+      localStorage.setItem('userToken', data.token);
+      showToast('✓ ยืนยันตัวตนสำเร็จ');
+
+      // Refresh plate modal view
+      openPlateModal(_pendingHoldSlotId, _pendingHoldSlotCode);
+    } catch (err) {
+      console.error(err);
+      showToast(`❌ ${err.message || 'ยืนยัน OTP ไม่สำเร็จ'}`);
+    }
   });
 
   // Enter key submits if confirm is enabled
-  [lettersInp, numberInp].forEach(inp => {
+  [lettersInp, numberInp, otpInp, phoneInp].forEach(inp => {
     inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !confirm.disabled) {
-        confirm.click();
+      if (e.key === 'Enter') {
+        if (inp === phoneInp && !requestOtpBtn.disabled) {
+          requestOtpBtn.click();
+        } else if (inp === otpInp && !verifyOtpBtn.disabled) {
+          verifyOtpBtn.click();
+        } else if (!confirm.disabled) {
+          confirm.click();
+        }
       }
     });
   });
@@ -338,19 +556,28 @@ function initPlateModal() {
   document.getElementById('plate-modal-overlay').addEventListener('click', closePlateModal);
 
   confirm.addEventListener('click', async () => {
-    const lettersVal = lettersInp.value.trim();
-    const numberVal = numberInp.value.trim();
-    const provinceVal = provinceInp.value;
+    const isNewVehicle = savedVehiclesSelect.value === 'new';
+    let licensePlate = '';
+    let province = '';
 
-    if (!lettersVal || !numberVal || !provinceVal) return;
-
-    const plate = `${lettersVal} ${numberVal} ${provinceVal}`;
+    const userToken = localStorage.getItem('userToken');
+    if (userToken && !isNewVehicle) {
+      const [plateVal, provVal] = savedVehiclesSelect.value.split('|');
+      licensePlate = plateVal;
+      province = provVal;
+    } else {
+      const lettersVal = lettersInp.value.trim();
+      const numberVal = numberInp.value.trim();
+      province = provinceInp.value;
+      if (!lettersVal || !numberVal || !province) return;
+      licensePlate = `${lettersVal} ${numberVal}`;
+    }
 
     const slotId = _pendingHoldSlotId;
     const slotCode = _pendingHoldSlotCode;
 
     closePlateModal();
-    await holdSlot(slotId, slotCode, plate);
+    await holdSlot(slotId, slotCode, licensePlate, province);
   });
 }
 
@@ -513,7 +740,7 @@ function makeSlotEl(slot) {
 }
 
 // ── HOLD A SLOT ──
-async function holdSlot(slotId, slotCode, licensePlate) {
+async function holdSlot(slotId, slotCode, licensePlate, province) {
   if (hasActiveStoredBooking()) {
     alert('คุณมีการจองที่กำลังใช้งานอยู่แล้ว (You already have an active booking)');
     return;
@@ -521,11 +748,17 @@ async function holdSlot(slotId, slotCode, licensePlate) {
 
   showToast(`กำลังจอง ${slotCode}...`);
 
+  const headers = { 'Content-Type': 'application/json' };
+  const userToken = localStorage.getItem('userToken');
+  if (userToken) {
+    headers['Authorization'] = `Bearer ${userToken}`;
+  }
+
   try {
     const res = await fetch(`${API}/api/slots/${slotId}/hold`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ license_plate: licensePlate }),
+      headers: headers,
+      body: JSON.stringify({ license_plate: licensePlate, province: province }),
     });
 
     if (res.status === 400 || res.status === 409) {

@@ -52,3 +52,12 @@ This document outlines the core capabilities of the Smart Park & Ride system, ca
 - **Database Migrations:** Structured DB versioning with Alembic, enabling baseline migrations and clean schemas.
 - **Quality Assurance Testing:** Unit test suite covering JWT authentication and booking state machine flows.
 
+---
+
+## 🚘 Phase 6: Passenger Identity & Vehicle Registry
+- **Passwordless OTP Authentication:** Commuters verify identity via SMS OTP without standard passwords.
+- **Commuter JWT Sessions:** Commuters receive signed JWT sessions, cached locally in the browser.
+- **Saved Vehicle Registry:** Automatically persists plate numbers and provinces to a `user_vehicles` database.
+- **One-Click Bookings:** Automatically reads saved vehicles on modal open to allow instant, typo-free holds.
+
+

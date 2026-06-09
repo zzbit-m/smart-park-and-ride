@@ -62,14 +62,21 @@ class RateLimiter:
         self.window_seconds = window_seconds
 
     async def __call__(self, request: Request) -> None:
-        # Bypass rate limits for authenticated admin or operator staff
+        # Resolve authentication payload if present
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.removeprefix("Bearer ").strip()
             payload = decode_access_token(token)
-            if payload and payload.get("role") in ["admin", "operator"]:
-                logger.debug(f"Bypassing rate limit on '{self.endpoint}' for staff user '{payload.get('sub')}'")
-                return
+            if payload:
+                role = payload.get("role")
+                if role in ["admin", "operator"]:
+                    logger.debug(f"Bypassing rate limit on '{self.endpoint}' for staff user '{payload.get('sub')}'")
+                    return
+                
+                user_id = payload.get("sub")
+                if user_id:
+                    await check_rate_limit(f"user:{user_id}", self.endpoint, self.limit, self.window_seconds)
+                    return
 
         ip = get_client_ip(request)
-        await check_rate_limit(ip, self.endpoint, self.limit, self.window_seconds)
+        await check_rate_limit(f"ip:{ip}", self.endpoint, self.limit, self.window_seconds)

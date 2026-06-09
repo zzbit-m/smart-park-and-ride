@@ -163,32 +163,78 @@
 
       <div class="plate-modal-icon">🚘</div>
       <h2 id="plate-modal-title" class="plate-modal-title">ยืนยันทะเบียนรถ</h2>
-      <p class="plate-modal-sub">กรอกทะเบียนรถของคุณเพื่อจองช่องจอด</p>
+      <p class="plate-modal-sub">ระบุข้อมูลเพื่อจองช่องจอด</p>
 
       <div class="plate-input-wrap">
-        <label class="plate-input-label">ทะเบียนรถ (License Plate)</label>
-        
-        <!-- Row 1: Letters and Number side-by-side -->
-        <div class="plate-row-1" style="display: flex; gap: 12px; margin-bottom: 12px;">
-          <input
-            id="plate-letters"
-            type="text"
-            class="plate-input"
-            placeholder="อักษร (เช่น กข)"
-            maxlength="3"
-            autocomplete="off"
-            style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
-          />
-          <input
-            id="plate-number"
-            type="text"
-            class="plate-input"
-            placeholder="เลข (เช่น 1234)"
-            maxlength="4"
-            autocomplete="off"
-            style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
-          />
+        <!-- 1. Saved Vehicles Dropdown (Hidden by default) -->
+        <div id="saved-vehicles-wrap" style="display: none; margin-bottom: 12px; text-align: left;">
+          <label class="plate-input-label">เลือกจากรถที่บันทึกไว้ (Saved Vehicles)</label>
+          <select id="plate-saved-vehicles" class="plate-input" style="font-size: 16px; padding: 14px; width: 100%; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text);">
+            <option value="new">+ ระบุทะเบียนรถใหม่ (Enter new plate)</option>
+          </select>
         </div>
+
+        <!-- 2. Phone Input (For verification, shown when not logged in) -->
+        <div id="phone-input-wrap" style="margin-bottom: 12px; text-align: left;">
+          <label class="plate-input-label">เบอร์โทรศัพท์ (Phone Number)</label>
+          <div style="display: flex; gap: 8px;">
+            <input
+              id="plate-phone"
+              type="tel"
+              class="plate-input"
+              placeholder="เช่น 0812345678"
+              maxlength="15"
+              autocomplete="off"
+              style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
+            />
+            <button type="button" id="plate-otp-request-btn" class="plate-btn-confirm" style="margin: 0; padding: 0 16px; font-size: 14px; white-space: nowrap;" disabled>ขอ OTP</button>
+          </div>
+        </div>
+
+        <!-- 3. OTP Code Input (Hidden by default) -->
+        <div id="otp-input-wrap" style="display: none; margin-bottom: 12px; text-align: left;">
+          <label class="plate-input-label">รหัส OTP 4 หลัก</label>
+          <div style="display: flex; gap: 8px;">
+            <input
+              id="plate-otp"
+              type="text"
+              class="plate-input"
+              placeholder="1234"
+              maxlength="4"
+              autocomplete="off"
+              style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 4px;"
+            />
+            <button type="button" id="plate-otp-verify-btn" class="plate-btn-confirm" style="margin: 0; padding: 0 16px; font-size: 14px; white-space: nowrap; background: #00e5a0; color: #0a0f1e;" disabled>ยืนยัน OTP</button>
+          </div>
+          <p class="plate-input-hint" id="otp-input-hint" style="margin-top: 4px; font-size: 12px;"></p>
+        </div>
+
+        <!-- 4. Manual Plate Entry Fields (Shown when no saved vehicle selected) -->
+        <div id="manual-plate-wrap">
+          <label class="plate-input-label">ทะเบียนรถ (License Plate)</label>
+          
+          <!-- Row 1: Letters and Number side-by-side -->
+          <div class="plate-row-1" style="display: flex; gap: 12px; margin-bottom: 12px;">
+            <input
+              id="plate-letters"
+              type="text"
+              class="plate-input"
+              placeholder="อักษร (เช่น กข)"
+              maxlength="3"
+              autocomplete="off"
+              style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
+            />
+            <input
+              id="plate-number"
+              type="text"
+              class="plate-input"
+              placeholder="เลข (เช่น 1234)"
+              maxlength="4"
+              autocomplete="off"
+              style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
+            />
+          </div>
+
 
         <div class="plate-row-2">
           <select
@@ -275,8 +321,10 @@
             <option value="อุบลราชธานี">อุบลราชธานี</option>
           </select>
         </div>
+        </div> <!-- Close manual-plate-wrap -->
         <p class="plate-input-hint" id="plate-input-hint"></p>
       </div>
+
 
       <div class="plate-modal-actions">
         <button type="button" id="plate-cancel-btn" class="plate-btn-cancel">ยกเลิก</button>

@@ -80,7 +80,25 @@ This document serves as the single source of truth tracking the implementation p
 - [x] Configure Gunicorn/Uvicorn multi-process servers
 - [x] Set up GitHub Actions CI workflow to run lint and test suites on pull requests
 
+#### Phase 7: Passenger Identity & Vehicle Registry
+- [x] Database migration and mapping for `user_vehicles` table
+- [x] Passwordless OTP request and validation endpoints
+- [x] Front-end verification dialog integration
+- [x] Frontend local storage token and vehicle caching for one-click bookings
+- [x] Async SQL testing suites for auth and registry flows
+
+#### Phase 8: Concurrency, Security & Penalty Hardening (Remediation Updates)
+- [x] Secure OTP verification endpoints with a 5-strike Redis attempts lockout
+- [x] Eliminate occupied slots concurrency race conditions by using permanent Redis occupied keys
+- [x] Integrate frontend OTP verification controls to block unauthenticated reservations
+- [x] Restructure rate limiter keys to use JWT token payload `sub` (user-based) instead of IP-based controls
+- [x] Guard the delete hold endpoint with JWT auth checks and ownership checks
+- [x] Enforce regex sanitization on Thai license plate inputs
+- [x] Prevent vehicle slot-hoarding by blocking concurrent active bookings for the same plate
+- [x] Build backend vehicle registry cleanup by exposing vehicle deletion endpoints
+- [x] Complete the no-show penalty rules engine and apply automated 24-hour bans on 3 strikes
+
 ---
 
 ### 📅 Remaining Work (Remediation Roadmap)
-- **Status:** **COMPLETE**. All security, database, stability, scalability, testing, and production hardening milestones are completed. The system is certified **production-ready**.
+- **Status:** **COMPLETE**. All security, database, stability, scalability, concurrency, vehicle registry, testing, and production hardening milestones are completed. The system is certified **production-ready**.

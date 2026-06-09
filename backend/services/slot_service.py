@@ -21,6 +21,7 @@ from redis_client import (
     hold_slot,
     release_slot,
     set_qr_token_lookup,
+    occupy_slot,
 )
 
 logger = logging.getLogger(__name__)
@@ -246,7 +247,7 @@ async def scan_in(db: AsyncSession, qr_token: str, actor: str) -> dict:
         raise HTTPException(status_code=400, detail="Invalid or expired QR code")
 
     res = await db.execute(
-        text("SELECT status FROM bookings WHERE qr_token = :qr_token LIMIT 1"),
+        text("SELECT id, status FROM bookings WHERE qr_token = :qr_token LIMIT 1"),
         {"qr_token": qr_token}
     )
     booking = res.fetchone()
@@ -256,7 +257,7 @@ async def scan_in(db: AsyncSession, qr_token: str, actor: str) -> dict:
     BookingStateMachine.check_transition(booking.status, "confirmed")
 
     await delete_qr_token_lookup(qr_token)
-    await delete_slot_hold(slot_id)
+    await occupy_slot(slot_id, str(booking.id))
 
     try:
         await db.execute(
@@ -451,24 +452,84 @@ async def manual_release(db: AsyncSession, slot_code: str, actor: str) -> dict:
     }
 
 
-async def hold_slot(db: AsyncSession, slot_id: int, license_plate: str, actor: str) -> dict:
+async def hold_slot(
+    db: AsyncSession,
+    slot_id: int,
+    license_plate: str,
+    province: str,
+    user_id: str,
+    actor: str
+) -> dict:
     """Hold a slot for 15 minutes (atomic Redis lock + PostgreSQL booking row)."""
     plate = license_plate.strip().upper()
+    prov = province.strip()
     if not plate:
         logger.warning(f"Hold booking failed: license_plate missing for slot_id={slot_id}")
         raise HTTPException(status_code=422, detail="license_plate is required")
     if len(plate) > 20:
         logger.warning(f"Hold booking failed: license_plate too long ('{plate}') for slot_id={slot_id}")
         raise HTTPException(status_code=422, detail="license_plate must be 20 characters or fewer")
+    if not prov:
+        logger.warning(f"Hold booking failed: province missing for slot_id={slot_id}")
+        raise HTTPException(status_code=422, detail="province is required")
+
+    # Check if user is currently banned
+    user_check = await db.execute(
+        text("SELECT banned_until FROM users WHERE id = :uid"),
+        {"uid": user_id}
+    )
+    user_row = user_check.fetchone()
+    if user_row and user_row.banned_until:
+        banned_until = user_row.banned_until
+        if banned_until.tzinfo is None:
+            banned_until = banned_until.replace(tzinfo=timezone.utc)
+        if banned_until > datetime.now(timezone.utc):
+            logger.warning(f"Hold booking failed: user {user_id} is banned until {banned_until.isoformat()}")
+            raise HTTPException(
+                status_code=403,
+                detail=f"You are temporarily banned from making reservations due to multiple no-shows. Banned until {banned_until.isoformat()}."
+            )
+
+    import re
+    THAI_PLATE_REGEX = re.compile(r"^[1-9]?[ก-ฮ]+\s\d{1,4}$")
+    if not THAI_PLATE_REGEX.match(plate):
+        logger.warning(f"Hold booking failed: license_plate '{plate}' does not match Thai format")
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid Thai license plate format (expected: e.g. กข 1234 or 1กข 1234)"
+        )
+
+    # Check for duplicate active booking for this vehicle
+    dup_check = await db.execute(
+        text("""
+            SELECT id FROM bookings
+            WHERE license_plate = :plate AND status IN ('held', 'confirmed')
+            LIMIT 1
+        """),
+        {"plate": plate}
+    )
+    if dup_check.fetchone():
+        logger.warning(f"Hold booking failed: vehicle '{plate}' already has an active booking")
+        raise HTTPException(
+            status_code=400,
+            detail="This vehicle already has an active reservation or is currently parked."
+        )
 
     result = await db.execute(
-        text("SELECT id, slot_code FROM parking_slots WHERE id = :sid"),
+        text("SELECT id, slot_code, last_known_status FROM parking_slots WHERE id = :sid"),
         {"sid": slot_id},
     )
     slot = result.fetchone()
     if not slot:
         logger.warning(f"Hold booking failed: slot_id={slot_id} not found")
         raise HTTPException(status_code=404, detail="Slot not found")
+
+    if slot.last_known_status == "occupied":
+        logger.warning(f"Hold booking failed: slot_id={slot_id} is occupied in DB")
+        raise HTTPException(
+            status_code=400,
+            detail="Slot is currently occupied and cannot be held",
+        )
 
     booking_id = str(uuid.uuid4())
     qr_token = str(uuid.uuid4())
@@ -498,14 +559,30 @@ async def hold_slot(db: AsyncSession, slot_id: int, license_plate: str, actor: s
             """),
             {
                 "id": booking_id,
-                "user_id": PLACEHOLDER_USER_ID,
+                "user_id": user_id,
                 "slot_id": slot_id,
                 "qr_token": qr_token,
                 "license_plate": plate,
                 "expires_at": expires_at,
             },
         )
+        
+        # Save vehicle into user registry
+        await db.execute(
+            text("""
+                INSERT INTO user_vehicles (user_id, license_plate, province)
+                VALUES (:user_id, :license_plate, :province)
+                ON CONFLICT (user_id, license_plate, province) DO NOTHING
+            """),
+            {
+                "user_id": user_id,
+                "license_plate": plate,
+                "province": prov,
+            },
+        )
+        
         await db.commit()
+
     except Exception as e:
         logger.error(f"Failed to create hold booking in database: slot_id={slot_id}, booking_id={booking_id}. Error: {e}", exc_info=True)
         await release_slot(slot_id)
@@ -524,11 +601,11 @@ async def hold_slot(db: AsyncSession, slot_id: int, license_plate: str, actor: s
     }
 
 
-async def release_hold(db: AsyncSession, slot_id: int, qr_token: str, actor: str) -> dict:
+async def release_hold(db: AsyncSession, slot_id: int, qr_token: str, user_id: str | None = None, actor: str = "driver") -> dict:
     """Release a held slot (used by frontend cancel / scan-out)."""
     token_row = await db.execute(
         text("""
-            SELECT qr_token, status FROM bookings
+            SELECT qr_token, status, user_id FROM bookings
             WHERE slot_id = :sid AND status = 'held'
         """),
         {"sid": slot_id},
@@ -558,6 +635,14 @@ async def release_hold(db: AsyncSession, slot_id: int, qr_token: str, actor: str
         raise HTTPException(
             status_code=403,
             detail="Permission denied: Invalid hold validation token"
+        )
+
+    # Validate user ownership
+    if user_id is not None and str(token_result.user_id) != user_id:
+        logger.warning(f"User {user_id} attempted to release hold owned by User {token_result.user_id}")
+        raise HTTPException(
+            status_code=403,
+            detail="Permission denied: You do not own this booking"
         )
 
     await release_slot(slot_id)

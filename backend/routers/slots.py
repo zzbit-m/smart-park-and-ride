@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from routers.admin import verify_admin_token, verify_operator_token
+from routers.users import verify_user_token
 from services import slot_service
 from config import settings
 from services.rate_limit import RateLimiter
@@ -20,6 +21,7 @@ class SlotOut(BaseModel):
 
 class HoldRequest(BaseModel):
     license_plate: str
+    province: str = "กรุงเทพมหานคร"
 
 
 class HoldResponse(BaseModel):
@@ -180,6 +182,7 @@ async def hold_slot_endpoint(
     slot_id: int,
     body: HoldRequest,
     db: AsyncSession = Depends(get_db),
+    auth_payload: dict = Depends(verify_user_token),
     __ = Depends(RateLimiter("hold", settings.LIMIT_HOLD, settings.WINDOW_HOLD)),
 ):
     """Hold a slot for 15 minutes (atomic Redis lock + PostgreSQL booking row).
@@ -187,7 +190,16 @@ async def hold_slot_endpoint(
     The request body must include a ``license_plate`` string so the booking can
     be linked to a specific vehicle for access-control purposes.
     """
-    return await slot_service.hold_slot(db, slot_id, body.license_plate, actor="driver")
+    user_id = auth_payload.get("sub")
+    return await slot_service.hold_slot(
+        db,
+        slot_id,
+        body.license_plate,
+        province=body.province,
+        user_id=user_id,
+        actor="driver"
+    )
+
 
 
 @router.delete("/{slot_id}/hold")
@@ -195,7 +207,9 @@ async def release_hold(
     slot_id: int,
     qr_token: str,
     db: AsyncSession = Depends(get_db),
+    auth_payload: dict = Depends(verify_user_token),
 ):
     """Release a held slot (used by frontend cancel / scan-out)."""
-    return await slot_service.release_hold(db, slot_id, qr_token, actor="driver")
+    user_id = auth_payload.get("sub")
+    return await slot_service.release_hold(db, slot_id, qr_token, user_id=user_id, actor="driver")
 
