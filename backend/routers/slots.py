@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -211,5 +211,7 @@ async def release_hold(
 ):
     """Release a held slot (used by frontend cancel / scan-out)."""
     user_id = auth_payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
     return await slot_service.release_hold(db, slot_id, qr_token, user_id=user_id, actor="driver")
 

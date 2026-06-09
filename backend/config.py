@@ -31,6 +31,14 @@ class Settings:
     LIMIT_SCAN: int = int(os.getenv("LIMIT_SCAN", "60"))
     WINDOW_SCAN: int = int(os.getenv("WINDOW_SCAN", "60"))
 
+    # Monitoring and backup settings
+    SENTRY_DSN: str | None = os.getenv("SENTRY_DSN")
+    SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0"))
+    BACKUP_DIR: str = os.getenv("BACKUP_DIR", "./backups")
+    BACKUP_RETENTION_DAYS: int = int(os.getenv("BACKUP_RETENTION_DAYS", "14"))
+    BACKUP_S3_BUCKET: str | None = os.getenv("BACKUP_S3_BUCKET")
+    BACKUP_S3_PREFIX: str = os.getenv("BACKUP_S3_PREFIX", "")
+
     def validate(self) -> None:
         """Validate critical configuration settings on startup."""
         if not self.ADMIN_USERNAME or not self.ADMIN_PASSWORD:

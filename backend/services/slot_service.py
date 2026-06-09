@@ -603,6 +603,7 @@ async def hold_slot(
 
 async def release_hold(db: AsyncSession, slot_id: int, qr_token: str, user_id: str | None = None, actor: str = "driver") -> dict:
     """Release a held slot (used by frontend cancel / scan-out)."""
+    # Fetch the active hold booking for this slot and ensure it belongs to the authenticated user.
     token_row = await db.execute(
         text("""
             SELECT qr_token, status, user_id FROM bookings
@@ -613,36 +614,20 @@ async def release_hold(db: AsyncSession, slot_id: int, qr_token: str, user_id: s
     token_result = token_row.fetchone()
 
     if not token_result:
-        # Check if booking exists under different status to raise clean error
-        res = await db.execute(
-            text("""
-                SELECT status FROM bookings
-                WHERE slot_id = :sid
-                ORDER BY held_at DESC
-                LIMIT 1
-            """),
-            {"sid": slot_id}
-        )
-        row = res.fetchone()
-        if row:
-            BookingStateMachine.check_transition(row.status, "expired")
-        else:
-            raise HTTPException(status_code=404, detail="No active hold found for slot")
+        raise HTTPException(status_code=404, detail="No active hold found for slot")
 
-    # Validate ownership of the hold via QR token comparison
+    if user_id is None or str(token_result.user_id) != user_id:
+        logger.warning(f"User {user_id} attempted to release hold owned by User {token_result.user_id}")
+        raise HTTPException(
+            status_code=403,
+            detail="Permission denied: You do not own this booking"
+        )
+
     if not qr_token or token_result.qr_token != qr_token:
         logger.warning(f"Unauthorized release hold attempt on slot_id={slot_id} with token='{qr_token}'")
         raise HTTPException(
             status_code=403,
             detail="Permission denied: Invalid hold validation token"
-        )
-
-    # Validate user ownership
-    if user_id is not None and str(token_result.user_id) != user_id:
-        logger.warning(f"User {user_id} attempted to release hold owned by User {token_result.user_id}")
-        raise HTTPException(
-            status_code=403,
-            detail="Permission denied: You do not own this booking"
         )
 
     await release_slot(slot_id)
