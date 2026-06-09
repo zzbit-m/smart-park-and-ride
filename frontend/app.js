@@ -228,6 +228,151 @@ function initTicketModal() {
 let _pendingHoldSlotId = null;
 let _pendingHoldSlotCode = null;
 
+function renderSavedVehiclesList(vehicles) {
+  const listContainer = document.getElementById('plate-saved-vehicles-list');
+  const selectionInput = document.getElementById('plate-saved-vehicles');
+  if (!listContainer || !selectionInput) return;
+
+  listContainer.replaceChildren();
+
+  // 1. Render existing vehicles
+  vehicles.forEach(v => {
+    const item = document.createElement('div');
+    item.className = 'saved-vehicle-item';
+    
+    // Check if currently selected
+    const value = `${v.license_plate}|${v.province}`;
+    if (selectionInput.value === value) {
+      item.classList.add('selected');
+    }
+
+    item.innerHTML = `
+      <div class="saved-vehicle-info">
+        <span class="saved-vehicle-plate">${v.license_plate}</span>
+        <span class="saved-vehicle-province">${v.province}</span>
+      </div>
+      <button type="button" class="saved-vehicle-delete-btn" title="ลบประวัติรถ">
+        🗑️
+      </button>
+    `;
+
+    // Click on item info selects it
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.saved-vehicle-delete-btn')) return;
+
+      selectionInput.value = value;
+      document.querySelectorAll('.saved-vehicle-item, .saved-vehicle-new-btn').forEach(el => el.classList.remove('selected'));
+      item.classList.add('selected');
+      syncModalFieldsVisibility();
+    });
+
+    // Delete button click handler
+    const deleteBtn = item.querySelector('.saved-vehicle-delete-btn');
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`ต้องการลบทะเบียนรถ ${v.license_plate} ใช่หรือไม่?`)) return;
+
+      const userToken = localStorage.getItem('userToken');
+      if (!userToken) return;
+
+      let deleteOk = false;
+      try {
+        const delRes = await fetch(`${API}/api/users/vehicles/${v.id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${userToken}` }
+        });
+        if (!delRes.ok) throw new Error('Delete failed');
+        deleteOk = true;
+      } catch (err) {
+        console.error(err);
+        showToast('❌ ลบข้อมูลไม่สำเร็จ');
+      }
+
+      if (!deleteOk) return;
+
+      showToast('✓ ลบข้อมูลสำเร็จ');
+
+      if (selectionInput.value === value) {
+        selectionInput.value = 'new';
+      }
+
+      try {
+        await fetchAndRenderSavedVehicles();
+      } catch (err) {
+        console.warn('Vehicle deleted but list refresh failed:', err);
+      }
+    });
+
+    listContainer.appendChild(item);
+  });
+
+  // 2. Render "+ ระบุทะเบียนรถใหม่" button at the bottom of the list
+  const newBtn = document.createElement('div');
+  newBtn.className = 'saved-vehicle-new-btn';
+  if (selectionInput.value === 'new') {
+    newBtn.classList.add('selected');
+  }
+  newBtn.textContent = '+ ระบุทะเบียนรถใหม่ (Enter new plate)';
+
+  newBtn.addEventListener('click', () => {
+    selectionInput.value = 'new';
+    document.querySelectorAll('.saved-vehicle-item, .saved-vehicle-new-btn').forEach(el => el.classList.remove('selected'));
+    newBtn.classList.add('selected');
+    syncModalFieldsVisibility();
+  });
+
+  listContainer.appendChild(newBtn);
+}
+
+async function fetchAndRenderSavedVehicles() {
+  const userToken = localStorage.getItem('userToken');
+  const selectionInput = document.getElementById('plate-saved-vehicles');
+  if (!userToken) return;
+
+  try {
+    const res = await fetch(`${API}/api/users/vehicles`, {
+      headers: { 'Authorization': `Bearer ${userToken}` }
+    });
+    if (res.status === 401) {
+      localStorage.removeItem('userToken');
+      document.getElementById('saved-vehicles-wrap').style.display = 'none';
+      document.getElementById('phone-input-wrap').style.display = 'block';
+      syncModalFieldsVisibility();
+      return;
+    }
+    if (!res.ok) {
+      document.getElementById('saved-vehicles-wrap').style.display = 'none';
+      syncModalFieldsVisibility();
+      return;
+    }
+
+    const vehicles = await res.json();
+
+    renderSavedVehiclesList(vehicles);
+
+    const validValues = vehicles.map(v => `${v.license_plate}|${v.province}`);
+    if (selectionInput.value !== 'new' && !validValues.includes(selectionInput.value)) {
+      if (vehicles.length > 0) {
+        selectionInput.value = `${vehicles[0].license_plate}|${vehicles[0].province}`;
+        renderSavedVehiclesList(vehicles);
+      } else {
+        selectionInput.value = 'new';
+        renderSavedVehiclesList(vehicles);
+      }
+    }
+
+    document.getElementById('saved-vehicles-wrap').style.display = 'block';
+    document.getElementById('phone-input-wrap').style.display = 'none';
+  } catch (err) {
+    console.warn('Failed to load saved vehicles:', err);
+    document.getElementById('saved-vehicles-wrap').style.display = 'none';
+    syncModalFieldsVisibility();
+    return;
+  }
+
+  syncModalFieldsVisibility();
+}
+
 async function openPlateModal(slotId, slotCode) {
   _pendingHoldSlotId = slotId;
   _pendingHoldSlotCode = slotCode;
@@ -243,7 +388,7 @@ async function openPlateModal(slotId, slotCode) {
   const confirm = document.getElementById('plate-confirm-btn');
   const requestOtpBtn = document.getElementById('plate-otp-request-btn');
   const verifyOtpBtn = document.getElementById('plate-otp-verify-btn');
-  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
+  const selectionInput = document.getElementById('plate-saved-vehicles');
 
   // Reset state
   lettersInp.value = '';
@@ -257,6 +402,7 @@ async function openPlateModal(slotId, slotCode) {
   confirm.disabled = true;
   requestOtpBtn.disabled = true;
   verifyOtpBtn.disabled = true;
+  if (selectionInput) selectionInput.value = 'new';
 
   // Hide otp input block
   document.getElementById('otp-input-wrap').style.display = 'none';
@@ -267,54 +413,15 @@ async function openPlateModal(slotId, slotCode) {
   // Check if authenticated
   const userToken = localStorage.getItem('userToken');
   if (userToken) {
-    try {
-      // Fetch saved vehicles
-      const res = await fetch(`${API}/api/users/vehicles`, {
-        headers: { 'Authorization': `Bearer ${userToken}` }
-      });
-      if (res.status === 401) {
-        throw new Error('Unauthorized');
-      }
-      const vehicles = await res.json();
-      
-      // Populate select
-      savedVehiclesSelect.innerHTML = '<option value="new">+ ระบุทะเบียนรถใหม่ (Enter new plate)</option>';
-      vehicles.forEach(v => {
-        const option = document.createElement('option');
-        option.value = `${v.license_plate}|${v.province}`;
-        option.textContent = `${v.license_plate} (${v.province})`;
-        savedVehiclesSelect.appendChild(option);
-      });
-
-      // Show saved vehicles selection
-      document.getElementById('saved-vehicles-wrap').style.display = 'block';
-      // Hide phone entry since we are logged in
-      document.getElementById('phone-input-wrap').style.display = 'none';
-      
-      // Select the first saved vehicle if it exists
-      if (vehicles.length > 0) {
-        savedVehiclesSelect.value = `${vehicles[0].license_plate}|${vehicles[0].province}`;
-      } else {
-        savedVehiclesSelect.value = 'new';
-      }
-    } catch (err) {
-      console.warn('Failed to load saved vehicles, falling back to login:', err);
-      localStorage.removeItem('userToken');
-      // Hide saved vehicles select
-      document.getElementById('saved-vehicles-wrap').style.display = 'none';
-      // Show phone entry
-      document.getElementById('phone-input-wrap').style.display = 'block';
-    }
+    await fetchAndRenderSavedVehicles();
   } else {
     // Hide saved vehicles select
     document.getElementById('saved-vehicles-wrap').style.display = 'none';
     // Show phone entry
     document.getElementById('phone-input-wrap').style.display = 'block';
+    syncModalFieldsVisibility();
   }
 
-  // Initial visibility sync
-  syncModalFieldsVisibility();
-  
   // Focus the phone input or manual letters input
   setTimeout(() => {
     if (document.getElementById('phone-input-wrap').style.display !== 'none') {
@@ -326,45 +433,7 @@ async function openPlateModal(slotId, slotCode) {
 }
 
 async function refreshModalAfterAuth() {
-  const userToken = localStorage.getItem('userToken');
-  if (!userToken) return;
-
-  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
-  if (!savedVehiclesSelect) return;
-
-  try {
-    const res = await fetch(`${API}/api/users/vehicles`, {
-      headers: { 'Authorization': `Bearer ${userToken}` }
-    });
-    if (res.status === 401) {
-      throw new Error('Unauthorized');
-    }
-    const vehicles = await res.json();
-    
-    savedVehiclesSelect.innerHTML = '<option value="new">+ ระบุทะเบียนรถใหม่ (Enter new plate)</option>';
-    vehicles.forEach(v => {
-      const option = document.createElement('option');
-      option.value = `${v.license_plate}|${v.province}`;
-      option.textContent = `${v.license_plate} (${v.province})`;
-      savedVehiclesSelect.appendChild(option);
-    });
-
-    document.getElementById('saved-vehicles-wrap').style.display = 'block';
-    document.getElementById('phone-input-wrap').style.display = 'none';
-    
-    if (vehicles.length > 0) {
-      savedVehiclesSelect.value = `${vehicles[0].license_plate}|${vehicles[0].province}`;
-    } else {
-      savedVehiclesSelect.value = 'new';
-    }
-  } catch (err) {
-    console.warn('Failed to load saved vehicles:', err);
-    localStorage.removeItem('userToken');
-    document.getElementById('saved-vehicles-wrap').style.display = 'none';
-    document.getElementById('phone-input-wrap').style.display = 'block';
-  }
-
-  syncModalFieldsVisibility();
+  await fetchAndRenderSavedVehicles();
 }
 
 function syncModalFieldsVisibility() {
@@ -446,7 +515,7 @@ function validateModalInputs() {
   }
 
   if (lettersOk && numberOk && provinceOk) {
-    const combined = `${lettersVal} ${numberVal} ${provinceVal}`;
+    const combined = `${lettersVal} ${numberVal}`;
     if (combined.length > 20) {
       confirm.disabled = true;
       hint.textContent = 'ทะเบียนรถรวมต้องไม่เกิน 20 ตัวอักษร';

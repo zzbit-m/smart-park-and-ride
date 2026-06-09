@@ -97,6 +97,8 @@ This document serves as the single source of truth tracking the implementation p
 - [x] Prevent vehicle slot-hoarding by blocking concurrent active bookings for the same plate
 - [x] Build backend vehicle registry cleanup by exposing vehicle deletion endpoints
 - [x] Complete the no-show penalty rules engine and apply automated 24-hour bans on 3 strikes
+- [x] Add saved vehicle deletion controls in the booking modal UI (rendering dynamically with in-place API delete and refresh)
+- [x] Correct manual license plate length validation on frontend (checking plate letters and numbers only, ignoring province length, to match backend 20-character limit checks)
 
 ---
 

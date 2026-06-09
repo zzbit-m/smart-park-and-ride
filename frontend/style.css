@@ -2612,5 +2612,104 @@ select.plate-input {
   margin-bottom: 16px;
 }
 
+/* Saved Vehicles List Styles */
+.saved-vehicles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  background: rgba(10, 15, 30, 0.6);
+}
+
+.saved-vehicle-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--surface2);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.saved-vehicle-item:hover {
+  border-color: var(--accent);
+  background: rgba(61, 139, 255, 0.05);
+}
+
+.saved-vehicle-item.selected {
+  border-color: var(--accent);
+  background: rgba(61, 139, 255, 0.15);
+  box-shadow: 0 0 10px rgba(61, 139, 255, 0.2);
+}
+
+.saved-vehicle-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.saved-vehicle-plate {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.saved-vehicle-province {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.saved-vehicle-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-left: 8px;
+  font-size: 14px;
+}
+
+.saved-vehicle-delete-btn:hover {
+  background: rgba(255, 77, 109, 0.15);
+  color: #ff3355;
+}
+
+.saved-vehicle-new-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--surface2);
+  border: 1px dashed var(--border);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.saved-vehicle-new-btn:hover,
+.saved-vehicle-new-btn.selected {
+  border-color: var(--accent);
+  background: rgba(61, 139, 255, 0.05);
+  color: #70a5ff;
+}
+
 
 

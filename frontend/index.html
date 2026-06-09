@@ -166,12 +166,11 @@
       <p class="plate-modal-sub">ระบุข้อมูลเพื่อจองช่องจอด</p>
 
       <div class="plate-input-wrap">
-        <!-- 1. Saved Vehicles Dropdown (Hidden by default) -->
+        <!-- 1. Saved Vehicles Dropdown (Replaced with custom list with delete) -->
         <div id="saved-vehicles-wrap" style="display: none; margin-bottom: 12px; text-align: left;">
           <label class="plate-input-label">เลือกจากรถที่บันทึกไว้ (Saved Vehicles)</label>
-          <select id="plate-saved-vehicles" class="plate-input" style="font-size: 16px; padding: 14px; width: 100%; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text);">
-            <option value="new">+ ระบุทะเบียนรถใหม่ (Enter new plate)</option>
-          </select>
+          <input type="hidden" id="plate-saved-vehicles" value="new" />
+          <div id="plate-saved-vehicles-list" class="saved-vehicles-list"></div>
         </div>
 
         <!-- 2. Phone Input (For verification, shown when not logged in) -->
