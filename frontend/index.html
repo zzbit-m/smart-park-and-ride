@@ -211,7 +211,7 @@
         <!-- 4. Manual Plate Entry Fields (Shown when no saved vehicle selected) -->
         <div id="manual-plate-wrap">
           <label class="plate-input-label">ทะเบียนรถ (License Plate)</label>
-          
+
           <!-- Row 1: Letters and Number side-by-side -->
           <div class="plate-row-1" style="display: flex; gap: 12px; margin-bottom: 12px;">
             <input
@@ -320,6 +320,23 @@
             <option value="อุบลราชธานี">อุบลราชธานี</option>
           </select>
         </div>
+
+          <!-- 5. Vehicle Type Toggle (Car / Motorcycle) -->
+          <div class="vehicle-type-wrap" style="margin-top: 20px; margin-bottom: 12px; text-align: left;">
+            <label class="plate-input-label">ประเภทยานพาหนะ (Vehicle Type)</label>
+            <div class="vehicle-type-toggle">
+              <label class="vehicle-type-option selected" data-vehicle-type="car">
+                <input type="radio" name="vehicle-type" value="car" checked hidden />
+                <span class="vehicle-type-icon">🚗</span>
+                <span class="vehicle-type-label">รถยนต์ (Car)</span>
+              </label>
+              <label class="vehicle-type-option" data-vehicle-type="motorcycle">
+                <input type="radio" name="vehicle-type" value="motorcycle" hidden />
+                <span class="vehicle-type-icon">🏍️</span>
+                <span class="vehicle-type-label">มอเตอร์ไซค์ (Motorcycle)</span>
+              </label>
+            </div>
+          </div>
         </div> <!-- Close manual-plate-wrap -->
         <p class="plate-input-hint" id="plate-input-hint"></p>
       </div>
@@ -358,6 +375,10 @@
         <div class="ticket-detail-row" id="ticket-plate-row" hidden>
           <dt>ทะเบียนรถ</dt>
           <dd id="ticket-plate" class="ticket-mono">—</dd>
+        </div>
+        <div class="ticket-detail-row" id="ticket-vehicle-type-row" hidden>
+          <dt>ประเภท</dt>
+          <dd id="ticket-vehicle-type">—</dd>
         </div>
         <div class="ticket-detail-row">
           <dt>รหัสการจอง</dt>

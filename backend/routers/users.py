@@ -14,6 +14,7 @@ class VehicleOut(BaseModel):
     id: int
     license_plate: str
     province: str
+    vehicle_type: str = "car"
 
 
 async def verify_user_token(authorization: str = Header(default="")) -> dict:
@@ -40,12 +41,12 @@ async def list_user_vehicles(
         raise HTTPException(status_code=401, detail="Invalid token payload")
         
     result = await db.execute(
-        text("SELECT id, license_plate, province FROM user_vehicles WHERE user_id = :uid ORDER BY created_at DESC"),
+        text("SELECT id, license_plate, province, vehicle_type FROM user_vehicles WHERE user_id = :uid ORDER BY created_at DESC"),
         {"uid": user_id}
     )
     rows = result.fetchall()
     return [
-        VehicleOut(id=row.id, license_plate=row.license_plate, province=row.province)
+        VehicleOut(id=row.id, license_plate=row.license_plate, province=row.province, vehicle_type=row.vehicle_type)
         for row in rows
     ]
 

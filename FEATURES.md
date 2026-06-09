@@ -38,7 +38,7 @@ Core capabilities of the Smart Park & Ride system, grouped by phase.
 ## 🖥️ Phase 4: Operator & Rider Experience
 - **Analytics Dashboard:** Occupancy, average check-in time, expired trends.
 - **Camera QR Scanner:** Client-side webcam scan for check-in/check-out.
-- **License Plate Capture:** Plate + province associated with each hold.
+- **License Plate Capture:** Plate + province + vehicle type (car/motorcycle) associated with each hold.
 - **Client-Side QR Rendering:** Offline-capable via `qrious.min.js`.
 
 ---
@@ -53,7 +53,7 @@ Core capabilities of the Smart Park & Ride system, grouped by phase.
 ---
 
 ## 📊 Phase 7: Analytics & Business Insights
-- **Admin Export Summary:** `GET /api/admin/export/summary` — aggregated daily/weekly/monthly insights.
+- **Admin Export Summary:** `GET /api/admin/export/summary` — aggregated daily/weekly/monthly insights with car vs motorcycle breakdown.
 - **SQL Aggregation:** Uses `GROUP BY` and `BETWEEN` for efficient time-range queries (no Python loops).
 - **Three-Layer Separation:** Repository (SQL) → Service (logic) → Router (endpoint) for clean maintainability.
 - **Day / Week / Month Ranges:** Date picker + range selector in the admin Dashboard card.
@@ -67,7 +67,7 @@ Core capabilities of the Smart Park & Ride system, grouped by phase.
 ## 🚘 Phase 6: Passenger Identity & Vehicle Registry
 - **Passwordless OTP Auth:** Phone-based SMS verification.
 - **Commuter JWT:** Token cached in `localStorage`.
-- **Saved Vehicle Registry:** Auto-saves plate + province to `user_vehicles`.
+- **Saved Vehicle Registry:** Auto-saves plate + province + vehicle type (car/motorcycle) to `user_vehicles`.
 - **One-Click Bookings:** Saved vehicles load instantly on modal open.
 - **Vehicle Deletion UI:** Delete saved plates from the booking modal.
 - **No-Show Penalty:** 3 strikes → 24-hour ban.

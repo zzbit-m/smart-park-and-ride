@@ -58,7 +58,21 @@ This project was updated with a small set of production-readiness improvements.
      - `sentry-sdk`
      - `boto3`
 
+6. **Vehicle type (car/motorcycle) support**
+   - Added `vehicle_type` column to `user_vehicles` and `bookings` tables
+   - New Alembic migration: `d4e5f6a7b8c9_add_vehicle_type.py`
+   - Frontend toggle to choose car 🚗 or motorcycle 🏍️ when entering license plate
+   - Vehicle type shown in saved vehicles list and booking ticket modal
+   - Analytics summary now splits counts into `total_cars` and `total_motorcycles`
+   - Audit logs include `vehicle_type` in hold events
+
 ## How to run
+
+### Database migration
+After pulling changes, run:
+```bash
+docker-compose exec backend alembic upgrade head
+```
 
 ### Health check
 

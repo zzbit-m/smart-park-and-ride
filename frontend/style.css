@@ -999,6 +999,79 @@ select.plate-input {
   color: var(--red);
 }
 
+/* ── Vehicle Type Toggle ── */
+.vehicle-type-wrap {
+  margin-bottom: 4px;
+}
+
+.vehicle-type-toggle {
+  display: flex;
+  gap: 10px;
+}
+
+.vehicle-type-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.vehicle-type-option::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(61, 139, 255, 0.06), transparent);
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+
+.vehicle-type-option:hover {
+  border-color: rgba(61, 139, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.vehicle-type-option.selected {
+  border-color: var(--accent);
+  background: rgba(61, 139, 255, 0.1);
+  box-shadow: 0 0 0 2px rgba(61, 139, 255, 0.15), 0 4px 12px rgba(61, 139, 255, 0.1);
+}
+
+.vehicle-type-option.selected::after {
+  opacity: 1;
+}
+
+.vehicle-type-icon {
+  font-size: 26px;
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.vehicle-type-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-th);
+  letter-spacing: 0.3px;
+  text-align: center;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
+}
+
+.vehicle-type-option.selected .vehicle-type-label {
+  color: var(--accent);
+}
+
 /* ── Action buttons ── */
 .plate-modal-actions {
   display: flex;
@@ -2676,6 +2749,7 @@ select.plate-input {
 .saved-vehicle-province {
   font-size: 11px;
   color: var(--text-dim);
+  font-family: var(--font-mono);
   margin-top: 2px;
 }
 

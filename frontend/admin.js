@@ -886,6 +886,7 @@ async function fetchSummary() {
     if (subtitle) subtitle.textContent = `${data.range || r} — ${data.date || d}`;
 
     setTxt('summary-total-cars', data.total_cars ?? '—');
+    setTxt('summary-total-motorcycles', data.total_motorcycles ?? '—');
     setTxt('summary-avg-duration', data.average_duration_minutes != null ? `${data.average_duration_minutes.toFixed(1)} m` : '—');
     setTxt('summary-occupancy', data.occupancy_rate != null ? `${(data.occupancy_rate * 100).toFixed(1)}%` : '—');
 

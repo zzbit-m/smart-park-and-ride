@@ -8,7 +8,8 @@ async def daily_summary_stats(db: AsyncSession, date_from: date, date_to: date) 
     result = await db.execute(
         text("""
             SELECT
-                COUNT(*)                                              AS total_cars,
+                COUNT(*) FILTER (WHERE vehicle_type = 'car')        AS total_cars,
+                COUNT(*) FILTER (WHERE vehicle_type = 'motorcycle') AS total_motorcycles,
                 COALESCE(
                     AVG(EXTRACT(EPOCH FROM (checked_out_at - checked_in_at)) / 60.0),
                     0
@@ -26,6 +27,7 @@ async def daily_summary_stats(db: AsyncSession, date_from: date, date_to: date) 
     row = result.fetchone()
     return {
         "total_cars": row.total_cars if row else 0,
+        "total_motorcycles": row.total_motorcycles if row else 0,
         "avg_minutes": round(float(row.avg_minutes), 2) if row else 0.0,
         "used_slots": row.used_slots if row else 0,
     }

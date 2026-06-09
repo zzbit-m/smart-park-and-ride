@@ -58,6 +58,7 @@ async def get_export_summary(db: AsyncSession, target_date: date, range_type: st
         "range": RANGE_LABELS.get(range_type, "Daily"),
         "date": date_label,
         "total_cars": daily["total_cars"],
+        "total_motorcycles": daily["total_motorcycles"],
         "average_duration_minutes": daily["avg_minutes"],
         "occupancy_rate": occupancy_rate,
         "peak_hour": peak_hour,

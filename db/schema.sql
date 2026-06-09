@@ -29,6 +29,7 @@ CREATE TABLE user_vehicles (
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     license_plate   VARCHAR(20) NOT NULL,
     province        VARCHAR(100) NOT NULL,
+    vehicle_type    VARCHAR(20) NOT NULL DEFAULT 'car',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (user_id, license_plate, province)
 );
@@ -68,6 +69,7 @@ CREATE TABLE bookings (
     status          booking_status NOT NULL DEFAULT 'held',
     qr_token        VARCHAR(128) UNIQUE NOT NULL,
     license_plate   VARCHAR(20),
+    vehicle_type    VARCHAR(20) NOT NULL DEFAULT 'car',
     held_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at      TIMESTAMPTZ NOT NULL,
     checked_in_at   TIMESTAMPTZ,
