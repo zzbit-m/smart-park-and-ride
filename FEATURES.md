@@ -52,6 +52,18 @@ Core capabilities of the Smart Park & Ride system, grouped by phase.
 
 ---
 
+## 📊 Phase 7: Analytics & Business Insights
+- **Admin Export Summary:** `GET /api/admin/export/summary` — aggregated daily/weekly/monthly insights.
+- **SQL Aggregation:** Uses `GROUP BY` and `BETWEEN` for efficient time-range queries (no Python loops).
+- **Three-Layer Separation:** Repository (SQL) → Service (logic) → Router (endpoint) for clean maintainability.
+- **Day / Week / Month Ranges:** Date picker + range selector in the admin Dashboard card.
+- **Downloadable JSON:** One-click download of aggregated summary as a formatted JSON file.
+- **Occupancy Rate:** `unique_slots_used / total_slots` derived from `parking_zones.total_slots`.
+- **Peak Hour Detection:** Derives busiest hour from hourly distribution in a single pass.
+- **Slot Utilization Ranking:** `slot_code` + `usage_count` sorted descending.
+
+---
+
 ## 🚘 Phase 6: Passenger Identity & Vehicle Registry
 - **Passwordless OTP Auth:** Phone-based SMS verification.
 - **Commuter JWT:** Token cached in `localStorage`.

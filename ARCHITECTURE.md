@@ -12,7 +12,8 @@ This document details the architectural layout, core design patterns, and system
 
 ### 2. Layer Separation
 * **Routers (Presentation):** FastAPI routers are thin, descriptive, and declarative. Their duties are limited to validating request bodies, handling HTTP exception wrapping, and mapping response schemas.
-* **Services (Business Logic):** Realized in `backend/services/slot_service.py`, this layer acts as the single entry point for slot booking and modification, enforcing state machine invariants.
+* **Services (Business Logic):** `backend/services/slot_service.py` for slot booking (state machine). `backend/services/analytics_service.py` for aggregation formatting and date-range computation.
+* **Repositories (Data Access):** `backend/repositories/analytics_repo.py` contains raw SQL aggregate queries. Keeps SQL out of the service layer, enabling unit testing of logic without DB connections.
 * **Database (Persistence):** SQL scripts and ORM commands managing standard transaction scopes.
 
 ---

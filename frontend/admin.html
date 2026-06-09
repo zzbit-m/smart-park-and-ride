@@ -388,6 +388,52 @@
           </div>
         </div>
 
+        <!-- Export Summary Card -->
+        <div class="admin-card dash-summary-card" style="margin-top:20px;">
+          <div class="dash-chart-header" style="flex-wrap:nowrap;">
+            <div style="white-space:nowrap;">
+              <p class="dash-chart-title" style="font-size:15px;">Summary</p>
+              <p class="dash-chart-sub" id="summary-subtitle" style="font-size:11px;">Aggregated insights</p>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+              <input type="date" id="summary-date" class="dash-input" style="background:#1a2332;border:1px solid #2a3a52;color:#c8d6e5;padding:3px 6px;border-radius:6px;font-size:12px;width:135px;">
+              <select id="summary-range" style="background:#1a2332;border:1px solid #2a3a52;color:#c8d6e5;padding:3px 6px;border-radius:6px;font-size:12px;cursor:pointer;">
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+              </select>
+              <button id="summary-refresh-btn" class="btn-dash-refresh" title="Refresh summary" style="padding:5px 10px;font-size:14px;line-height:1;">
+                ↻
+              </button>
+              <button id="summary-download-btn" class="btn-dash-refresh" title="Download summary as JSON" style="padding:5px 10px;font-size:14px;line-height:1;">
+                ↓
+              </button>
+            </div>
+          </div>
+          <div class="dash-summary-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:12px 0;">
+            <div class="dash-summary-stat">
+              <span class="dash-summary-label" style="color:#6b7a99;font-size:12px;">Total Cars</span>
+              <span class="dash-summary-value" id="summary-total-cars" style="color:#e8edf5;font-size:22px;font-weight:600;">—</span>
+            </div>
+            <div class="dash-summary-stat">
+              <span class="dash-summary-label" style="color:#6b7a99;font-size:12px;">Avg Duration</span>
+              <span class="dash-summary-value" id="summary-avg-duration" style="color:#e8edf5;font-size:22px;font-weight:600;">—</span>
+            </div>
+            <div class="dash-summary-stat">
+              <span class="dash-summary-label" style="color:#6b7a99;font-size:12px;">Occupancy Rate</span>
+              <span class="dash-summary-value" id="summary-occupancy" style="color:#e8edf5;font-size:22px;font-weight:600;">—</span>
+            </div>
+            <div class="dash-summary-stat">
+              <span class="dash-summary-label" style="color:#6b7a99;font-size:12px;">Peak Hour</span>
+              <span class="dash-summary-value" id="summary-peak-hour" style="color:#e8edf5;font-size:22px;font-weight:600;">—</span>
+            </div>
+            <div class="dash-summary-stat">
+              <span class="dash-summary-label" style="color:#6b7a99;font-size:12px;">Top Slot</span>
+              <span class="dash-summary-value" id="summary-top-slot" style="color:#e8edf5;font-size:22px;font-weight:600;">—</span>
+            </div>
+          </div>
+        </div>
+
       </div><!-- /panel-dashboard -->
 
     </main>

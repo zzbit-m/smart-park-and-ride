@@ -23,6 +23,8 @@ from redis_client import get_all_slot_statuses
 from config import settings
 from services.jwt_helper import create_access_token, decode_access_token
 from services.audit import log_audit
+from services.analytics_service import get_export_summary
+from datetime import date
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -208,3 +210,17 @@ async def export_data(
             "Content-Disposition": "attachment; filename=smart_park_export.json"
         }
     )
+
+
+@router.get("/export/summary")
+async def export_summary(
+    _: dict = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+    d: str | None = None,
+    r: str = "day",
+):
+    if r not in ("day", "week", "month"):
+        raise HTTPException(status_code=422, detail="r must be one of: day, week, month")
+    target_date = date.fromisoformat(d) if d else date.today()
+    summary = await get_export_summary(db, target_date, r)
+    return summary
