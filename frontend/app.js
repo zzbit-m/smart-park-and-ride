@@ -325,6 +325,48 @@ async function openPlateModal(slotId, slotCode) {
   }, 80);
 }
 
+async function refreshModalAfterAuth() {
+  const userToken = localStorage.getItem('userToken');
+  if (!userToken) return;
+
+  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
+  if (!savedVehiclesSelect) return;
+
+  try {
+    const res = await fetch(`${API}/api/users/vehicles`, {
+      headers: { 'Authorization': `Bearer ${userToken}` }
+    });
+    if (res.status === 401) {
+      throw new Error('Unauthorized');
+    }
+    const vehicles = await res.json();
+    
+    savedVehiclesSelect.innerHTML = '<option value="new">+ ระบุทะเบียนรถใหม่ (Enter new plate)</option>';
+    vehicles.forEach(v => {
+      const option = document.createElement('option');
+      option.value = `${v.license_plate}|${v.province}`;
+      option.textContent = `${v.license_plate} (${v.province})`;
+      savedVehiclesSelect.appendChild(option);
+    });
+
+    document.getElementById('saved-vehicles-wrap').style.display = 'block';
+    document.getElementById('phone-input-wrap').style.display = 'none';
+    
+    if (vehicles.length > 0) {
+      savedVehiclesSelect.value = `${vehicles[0].license_plate}|${vehicles[0].province}`;
+    } else {
+      savedVehiclesSelect.value = 'new';
+    }
+  } catch (err) {
+    console.warn('Failed to load saved vehicles:', err);
+    localStorage.removeItem('userToken');
+    document.getElementById('saved-vehicles-wrap').style.display = 'none';
+    document.getElementById('phone-input-wrap').style.display = 'block';
+  }
+
+  syncModalFieldsVisibility();
+}
+
 function syncModalFieldsVisibility() {
   const userToken = localStorage.getItem('userToken');
   const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
@@ -529,8 +571,8 @@ function initPlateModal() {
       localStorage.setItem('userToken', data.token);
       showToast('✓ ยืนยันตัวตนสำเร็จ');
 
-      // Refresh plate modal view
-      openPlateModal(_pendingHoldSlotId, _pendingHoldSlotCode);
+      // Refresh plate modal view without resetting fields
+      await refreshModalAfterAuth();
     } catch (err) {
       console.error(err);
       showToast(`❌ ${err.message || 'ยืนยัน OTP ไม่สำเร็จ'}`);

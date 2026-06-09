@@ -90,7 +90,7 @@ This document serves as the single source of truth tracking the implementation p
 #### Phase 8: Concurrency, Security & Penalty Hardening (Remediation Updates)
 - [x] Secure OTP verification endpoints with a 5-strike Redis attempts lockout
 - [x] Eliminate occupied slots concurrency race conditions by using permanent Redis occupied keys
-- [x] Integrate frontend OTP verification controls to block unauthenticated reservations
+- [x] Integrate frontend OTP verification controls to block unauthenticated reservations, and optimize modal refresh flows to prevent duplicate listener bindings
 - [x] Restructure rate limiter keys to use JWT token payload `sub` (user-based) instead of IP-based controls
 - [x] Guard the delete hold endpoint with JWT auth checks and ownership checks
 - [x] Enforce regex sanitization on Thai license plate inputs
