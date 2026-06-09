@@ -1,14 +1,14 @@
 # Current System State
 
-This document serves as the single source of truth tracking the implementation progress, overall health, and upcoming goals of the Smart Park & Ride system.
+Single source of truth tracking implementation progress, health, and remaining work.
 
 ---
 
 ## Overall Health Status
-- **Current Milestone:** Phase 4 — Product Features & Stabilization
-- **Stability Rating:** Stable & Feature-Complete for Core Roles.
-- **Backend Health:** Active and verified. Core layers are decoupled; business logic resides cleanly within services.
-- **Frontend Health:** Functional, responsive, and utilizing local QR generation and camera scanning utilities.
+- **Current Milestone:** MVP — functional for small-scale pilot
+- **Stability Rating:** Stable core booking flow, but several gaps for production
+- **Backend Health:** Core layers are decoupled; business logic resides cleanly within services. State machine invariants enforced. No error tracking (Sentry).
+- **Frontend Health:** Functional vanilla JS. Booking tied to `localStorage` (1 device). No real-time updates (30s polling).
 
 ---
 
@@ -17,16 +17,16 @@ This document serves as the single source of truth tracking the implementation p
 ### ✅ Completed Work
 
 #### Phase 0: Security & Configurations
-- [x] Enforce environment variable security constraints (Startup Credential Verification)
-- [x] Runtime web client configuration mapping via `config.js`
+- [x] Enforce environment variable security constraints
+- [x] Runtime web client configuration via `config.js`
 - [x] Explicit domain restrictions (CORS origin validation)
-- [x] Protected Database Seeding route behind Admin validation
+- [x] Protected database seeding behind admin validation
 
 #### Phase 1: Stability Layer
 - [x] Background async expiry worker to sync Redis holds with PostgreSQL
 - [x] Uniform, structured logs configuration
-- [x] Exceptions shielding to prevent runtime leak of tracebacks
-- [x] Connection health endpoints at `/health`
+- [x] Exception shielding to prevent runtime leak of tracebacks
+- [x] Connection health endpoint at `/health`
 
 #### Phase 2: Architecture Design
 - [x] Extract slot reservation logic into dedicated service handlers
@@ -37,70 +37,75 @@ This document serves as the single source of truth tracking the implementation p
 - [x] Access token validation using HS256-signed JWTs
 - [x] Role check validation on sensitive operations
 - [x] Cache-backed transaction rate limiting
-- [x] Audit trail recording on structural database shifts
+- [x] Audit trail recording on structural database changes
 
 #### Phase 4: Operator & Rider Experience
-- [x] Operations dashboard panel displaying live charts and metrics
+- [x] Operations dashboard with live charts and metrics
 - [x] Integrated HTML5 webcam-based QR ticket scanner
-- [x] Capture vehicle license plate credentials during hold transactions
-- [x] Offline client ticket QR generation using `qrious.min.js`
+- [x] Capture vehicle license plate during hold transactions
+- [x] Client-side ticket QR generation via `qrious.min.js`
 
-#### Phase 0: Emergency Security Fixes (Remediation Roadmap)
-- [x] Enforce secure configuration overrides on startup (block default secrets in production)
-- [x] Add operator/admin authorization check to analytics endpoint
-- [x] Prevent hold release IDOR by requiring slot owner's QR token
-- [x] Include qr_token query parameter in client cancellation calls
+#### Phase 5: Production Hardening & CI/CD
+- [x] Secure multi-stage, non-root Docker builds
+- [x] Gunicorn/Uvicorn multi-process servers
+- [x] GitHub Actions CI workflow (lint + tests on PR)
+- [x] Alembic migration framework with baseline schema
+- [x] Decoupled expiry worker in standalone container
+- [x] Backend container health checks in docker-compose.yml
 
-#### Phase 1: Core System Stabilization (Remediation Roadmap)
-- [x] Guard database seeding endpoints against execution in production environment
-- [x] Align frontend UI checkout with backend error handling to preserve ticket state
-
-#### Phase 2: Database & Data Integrity (Remediation Roadmap)
-- [x] Initialize Alembic migration tracking framework
-- [x] Create baseline database migrations for schema.sql
-- [x] Tune SQLAlchemy connection pools for production reliability
-
-#### Phase 3: Scalability & Architecture (Remediation Roadmap)
-- [x] Decouple asyncio background expiry worker from FastAPI API server process
-- [x] Run background worker in standalone container process under Docker Compose
-
-#### Phase 4: Observability & Reliability (Remediation Roadmap)
-- [x] Implement atomic rate limiting using Redis Lua scripts
-- [x] Prevent X-Forwarded-For IP spoofing via TRUST_PROXY parameter
-- [x] Exempt authenticated operator and admin staff from gate rate limits
-- [x] Configure backend container health checks inside docker-compose.yml
-
-#### Phase 5: Testing & Quality Assurance (Remediation Roadmap)
-- [x] Create test harness using pytest, pytest-asyncio and httpx
-- [x] Write unit tests for JWT helpers and state-machine transitions
-- [x] Run test suite successfully verifying core stability
-
-#### Phase 6: Production Hardening & CI/CD (Remediation Roadmap)
-- [x] Deploy secure multi-stage, non-root Docker builds
-- [x] Configure Gunicorn/Uvicorn multi-process servers
-- [x] Set up GitHub Actions CI workflow to run lint and test suites on pull requests
-
-#### Phase 7: Passenger Identity & Vehicle Registry
-- [x] Database migration and mapping for `user_vehicles` table
+#### Phase 6: Passenger Identity & Vehicle Registry
+- [x] Database migration and `user_vehicles` table
 - [x] Passwordless OTP request and validation endpoints
-- [x] Front-end verification dialog integration
-- [x] Frontend local storage token and vehicle caching for one-click bookings
-- [x] Async SQL testing suites for auth and registry flows
+- [x] Front-end OTP verification dialog
+- [x] Browser token + vehicle caching for one-click bookings
+- [x] Saved vehicle list with delete controls
+- [x] Thai license plate regex validation (frontend + backend)
+- [x] Slot-hoarding prevention (duplicate plate check)
+- [x] No-show penalty engine (3 strikes → 24h ban)
 
-#### Phase 8: Concurrency, Security & Penalty Hardening (Remediation Updates)
-- [x] Secure OTP verification endpoints with a 5-strike Redis attempts lockout
-- [x] Eliminate occupied slots concurrency race conditions by using permanent Redis occupied keys
-- [x] Integrate frontend OTP verification controls to block unauthenticated reservations, and optimize modal refresh flows to prevent duplicate listener bindings
-- [x] Restructure rate limiter keys to use JWT token payload `sub` (user-based) instead of IP-based controls
-- [x] Guard the delete hold endpoint with JWT auth checks and ownership checks
-- [x] Enforce regex sanitization on Thai license plate inputs
-- [x] Prevent vehicle slot-hoarding by blocking concurrent active bookings for the same plate
-- [x] Build backend vehicle registry cleanup by exposing vehicle deletion endpoints
-- [x] Complete the no-show penalty rules engine and apply automated 24-hour bans on 3 strikes
-- [x] Add saved vehicle deletion controls in the booking modal UI (rendering dynamically with in-place API delete and refresh)
-- [x] Correct manual license plate length validation on frontend (checking plate letters and numbers only, ignoring province length, to match backend 20-character limit checks)
+#### Phase 7: Testing & Quality Assurance
+- [x] test harness with pytest, pytest-asyncio, httpx
+- [x] Unit tests for JWT helpers and state-machine transitions
+- [x] Async SQL tests for auth and registry flows
 
 ---
 
-### 📅 Remaining Work (Remediation Roadmap)
-- **Status:** **COMPLETE**. All security, database, stability, scalability, concurrency, vehicle registry, testing, and production hardening milestones are completed. The system is certified **production-ready**.
+### ⚠️ Known Gaps & Limitations
+
+#### Core Booking
+- [ ] **No real-time updates** — Frontend polls every 30s; use SSE or WebSocket for live slot status
+- [ ] **Single-device session** — Booking stored in `localStorage`; user cannot switch devices mid-booking
+- [ ] **No waitlist** — If all slots held, user gets no queue position
+
+#### Monitoring & Operations
+- [ ] **No error tracking** — No Sentry or equivalent for production error monitoring
+- [ ] **No DB backup** — No automated backup/restore script for PostgreSQL
+- [ ] **No uptime monitoring** — No external health check pings
+
+#### Testing
+- [ ] **No frontend tests** — Zero coverage on UI logic
+- [ ] **No integration tests** — No end-to-end flow tests (hold → scan-in → scan-out)
+
+#### Frontend UX
+- [ ] **Vanilla JS maintenance burden** — No framework; scales poorly with complexity
+- [ ] **Thai plate regex strips vowels/tones** — `[ก-ฮ]` range excludes vowels and tone marks
+- [ ] **Confirm dialog blocks UI** — Uses `confirm()` for delete; no custom modal
+
+#### Business Features
+- [ ] **No payment integration** — No billing or receipt system
+- [ ] **No multi-zone/floor support** — Single lot only
+- [ ] **No email/SMS confirmation** — No booking receipt delivery
+
+---
+
+### 📅 Recommended Work (for small-production use)
+
+1. **DB Backup** — Add `pg_dump` cron to docker-compose with S3 upload
+2. **Error Tracking** — Add Sentry (1-line config for FastAPI)
+3. **Real-time** — Replace polling with Server-Sent Events for live slot updates
+4. **Server-side session** — Replace `localStorage` with token stored in httpOnly cookie for multi-device support
+5. **Integration tests** — Cover hold → cancel, hold → scan-in → scan-out
+6. **PWA manifest** — Add offline support so gate works during network drops
+7. **Payment** — Add Stripe/PromptPay for paid parking
+
+**Status:** MVP — functional for pilot, needs the gaps above for production deployment.

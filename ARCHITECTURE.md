@@ -30,28 +30,44 @@ stateDiagram-v2
 ```
 
 ### State Definitions
-1. **HELD:** A temporary hold placed on a parking slot. Backed by a Redis key with a Time-To-Live (TTL) of 15 minutes.
-2. **CONFIRMED:** The vehicle has checked in at the parking facility entry gate. The slot status becomes `'occupied'` in Postgres and `'occupied:{booking_id}'` in Redis (clearing the TTL hold and locking it permanently until scan-out).
-3. **COMPLETED:** The vehicle has checked out and departed the facility. The slot is returned to `'available'` in both Redis and Postgres.
-4. **EXPIRED:** A held reservation that did not receive scan-in confirmation before its 15-minute window expired. Expired holds trigger a penalty strike for the user.
-5. **NO_SHOW:** Reserved for manual operator overrides or physical check-in failures.
+1. **HELD:** A temporary hold placed on a parking slot. Backed by a Redis key with a TTL of 15 minutes.
+2. **CONFIRMED:** The vehicle has checked in. Slot becomes `'occupied'` in Postgres and Redis.
+3. **COMPLETED:** Vehicle has departed. Slot returned to `'available'` in both stores.
+4. **EXPIRED:** Held reservation expired without check-in. Triggers a penalty strike.
+5. **NO_SHOW:** Reserved for manual operator overrides.
 
 ### Consistency Worker
-* A standalone, decoupled background worker process (`expiry_worker.py`) running as a separate container service polls and reconciles state inconsistencies. It identifies PostgreSQL records stuck in `HELD` that have expired in Redis, updating their status to `EXPIRED`, incrementing user penalty counts, and applying 24-hour bans on 3 strikes.
-
+- A standalone process (`expiry_worker.py`) running as a separate container reconciles state: identifies PostgreSQL records stuck in `HELD` that expired in Redis, updates them to `EXPIRED`, increments penalty counts, and applies 24-hour bans on 3 strikes.
 
 ---
 
 ## Security & Authentication
 
-* **No Hardcoded Credentials:** The application parses database, cache, CORS settings, and default logins from environment variables initialized inside `backend/config.py`.
-* **HS256 JWT Authorization:** Administrators, Operators, and Commuters acquire signed JSON Web Tokens. Commuters verify via passwordless phone OTP, and employees authenticate with standard credentials.
-* **Role-Based Access Control (RBAC):** Privileges are checked before execution. Administrators can override, export data, and modify slot counts; Operators are limited to scanning operations and manual overrides; Commuters can hold slots and retrieve their saved vehicles.
-* **Vehicle & User Registry:** Relational mapping of `phone` -> `user` and `user` -> `user_vehicles` dynamically populates the database and associates slot reservations directly with unique commuter accounts rather than global defaults.
-* **CORS Settings:** A strict CORS middleware matches client origins against variables dynamically supplied at runtime.
+- **Environment-Based Config:** DB, cache, CORS, and credentials from `backend/config.py`.
+- **HS256 JWT:** Admins/Operators via credentials; Commuters via phone OTP.
+- **Role-Based Access Control (RBAC):** Admin (full), Operator (scan + release), Commuter (hold + vehicles).
+- **Vehicle & User Registry:** `phone` → `user` → `user_vehicles` mapping.
+- **Strict CORS:** Origin whitelist from environment.
 
 ---
 
-## Frontend Delivery Configuration
-* **Environment Agnosticism:** To bypass heavy build-time configurations, the static Vanilla HTML/JS frontend queries backend URLs using `window.APP_CONFIG` initialized from `frontend/config.js` at runtime.
+## Frontend Delivery
 
+- **Static Vanilla JS:** No build step. `window.APP_CONFIG` from `frontend/config.js`.
+- **Session:** JWT stored in `localStorage` — single-device only.
+- **Real-time:** 30-second polling for slot status (no WebSocket/SSE).
+- **QR:** Client-side generation via `qrious.min.js`; camera scan via native Web API.
+
+---
+
+## ⚠️ Architecture Limitations
+
+| Area | Current Approach | Recommended for Production |
+|------|-----------------|---------------------------|
+| **Session** | `localStorage` — 1 device | httpOnly cookie or server-side session |
+| **Real-time** | 30s polling | SSE or WebSocket |
+| **Error tracking** | None | Sentry |
+| **DB backup** | None | `pg_dump` cron |
+| **Offline** | None | PWA + service worker |
+| **Testing** | 4 backend test files | Add integration + frontend tests |
+| **UI** | Vanilla JS | Consider Svelte/React for maintainability |
