@@ -37,7 +37,7 @@
 
     <div class="bottom-bar">
       <button class="btn-secondary" onclick="showScreen('screen-parked')">🚗 รถของฉัน</button>
-      <button class="btn-secondary" onclick="showScreen('screen-tram')">🚃 รถราง</button>
+      <!-- <button class="btn-secondary" onclick="showScreen('screen-tram')">🚃 รถราง</button> -->
     </div>
   </div>
 
@@ -89,11 +89,13 @@
         <p>โซน A · แถว 1 · ช่อง 7</p>
       </div>
 
+      <!--
       <div class="tram-next">
         <div class="tram-next-label">🚃 รถรางคันถัดไป</div>
         <div class="tram-next-time" id="tram-next-time">กำลังโหลด...</div>
         <div class="tram-next-dest">→ สถานีกลาง</div>
       </div>
+      -->
 
       <button class="btn-primary" onclick="showScreen('screen-scanout')">สแกนออก QR</button>
     </div>
@@ -120,31 +122,27 @@
     </div>
   </div>
 
-  <!-- ── TRAM SCREEN (Phase 8 — Coming Soon) ── -->
+  <!-- ── TRAM SCREEN (Phase 8 — Coming Soon) ──
   <div id="screen-tram" class="screen">
     <div class="back-btn" onclick="showScreen('screen-home')">← กลับ</div>
 
     <div class="tram-cs-container">
 
-      <!-- Animated tram icon -->
       <div class="tram-cs-icon-wrap">
         <div class="tram-cs-orbit"></div>
         <span class="tram-cs-emoji">🚃</span>
       </div>
 
-      <!-- Live next tram pill (populated by JS from /api/trams/live) -->
       <div class="tram-cs-live-pill" id="tram-live-pill">
         <span class="tram-cs-live-dot"></span>
         <span id="tram-live-pill-text">รถรางคันต่อไป: สายสีน้ำเงิน (3 นาที)</span>
       </div>
 
-      <!-- Coming Soon headline -->
       <h2 class="tram-cs-title">ระบบรถรางรับส่ง</h2>
       <p class="tram-cs-badge">Coming Soon</p>
       <p class="tram-cs-sub">อยู่ระหว่างการพัฒนา</p>
       <p class="tram-cs-hw">รอการเชื่อมต่อข้อมูลฮาร์ดแวร์รถราง</p>
 
-      <!-- Phase roadmap chips -->
       <div class="tram-cs-chips">
         <span class="tram-chip tram-chip--done">✓ Phase 7 — Scan Out</span>
         <span class="tram-chip tram-chip--active">◉ Phase 8 — Tram Mock</span>
@@ -153,6 +151,7 @@
 
     </div>
   </div>
+  -->
 
   <!-- ── TOAST ── -->
   <div class="toast" id="toast"></div>
@@ -164,22 +163,167 @@
 
       <div class="plate-modal-icon">🚘</div>
       <h2 id="plate-modal-title" class="plate-modal-title">ยืนยันทะเบียนรถ</h2>
-      <p class="plate-modal-sub">กรอกทะเบียนรถของคุณเพื่อจองช่องจอด</p>
+      <p class="plate-modal-sub">ระบุข้อมูลเพื่อจองช่องจอด</p>
 
       <div class="plate-input-wrap">
-        <label for="plate-input" class="plate-input-label">ทะเบียนรถ (License Plate)</label>
-        <input
-          id="plate-input"
-          type="text"
-          class="plate-input"
-          placeholder="เช่น กข 1234 กรุงเทพฯ"
-          maxlength="20"
-          autocomplete="off"
-          autocapitalize="characters"
-          spellcheck="false"
-        />
+        <!-- 1. Saved Vehicles Dropdown (Replaced with custom list with delete) -->
+        <div id="saved-vehicles-wrap" style="display: none; margin-bottom: 12px; text-align: left;">
+          <label class="plate-input-label">เลือกจากรถที่บันทึกไว้ (Saved Vehicles)</label>
+          <input type="hidden" id="plate-saved-vehicles" value="new" />
+          <div id="plate-saved-vehicles-list" class="saved-vehicles-list"></div>
+        </div>
+
+        <!-- 2. Phone Input (For verification, shown when not logged in) -->
+        <div id="phone-input-wrap" style="margin-bottom: 12px; text-align: left;">
+          <label class="plate-input-label">เบอร์โทรศัพท์ (Phone Number)</label>
+          <div style="display: flex; gap: 8px;">
+            <input
+              id="plate-phone"
+              type="tel"
+              class="plate-input"
+              placeholder="เช่น 0812345678"
+              maxlength="15"
+              autocomplete="off"
+              style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
+            />
+            <button type="button" id="plate-otp-request-btn" class="plate-btn-confirm" style="margin: 0; padding: 0 16px; font-size: 14px; white-space: nowrap;" disabled>ขอ OTP</button>
+          </div>
+        </div>
+
+        <!-- 3. OTP Code Input (Hidden by default) -->
+        <div id="otp-input-wrap" style="display: none; margin-bottom: 12px; text-align: left;">
+          <label class="plate-input-label">รหัส OTP 4 หลัก</label>
+          <div style="display: flex; gap: 8px;">
+            <input
+              id="plate-otp"
+              type="text"
+              class="plate-input"
+              placeholder="1234"
+              maxlength="4"
+              autocomplete="off"
+              style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 4px;"
+            />
+            <button type="button" id="plate-otp-verify-btn" class="plate-btn-confirm" style="margin: 0; padding: 0 16px; font-size: 14px; white-space: nowrap; background: #00e5a0; color: #0a0f1e;" disabled>ยืนยัน OTP</button>
+          </div>
+          <p class="plate-input-hint" id="otp-input-hint" style="margin-top: 4px; font-size: 12px;"></p>
+        </div>
+
+        <!-- 4. Manual Plate Entry Fields (Shown when no saved vehicle selected) -->
+        <div id="manual-plate-wrap">
+          <label class="plate-input-label">ทะเบียนรถ (License Plate)</label>
+          
+          <!-- Row 1: Letters and Number side-by-side -->
+          <div class="plate-row-1" style="display: flex; gap: 12px; margin-bottom: 12px;">
+            <input
+              id="plate-letters"
+              type="text"
+              class="plate-input"
+              placeholder="อักษร (เช่น กข)"
+              maxlength="3"
+              autocomplete="off"
+              style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
+            />
+            <input
+              id="plate-number"
+              type="text"
+              class="plate-input"
+              placeholder="เลข (เช่น 1234)"
+              maxlength="4"
+              autocomplete="off"
+              style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
+            />
+          </div>
+
+
+        <div class="plate-row-2">
+          <select
+            id="plate-province"
+            class="plate-input"
+          >
+            <option value="" disabled selected hidden>เลือกจังหวัด</option>
+            <option value="กระบี่">กระบี่</option>
+            <option value="กรุงเทพมหานคร">กรุงเทพมหานคร</option>
+            <option value="กาญจนบุรี">กาญจนบุรี</option>
+            <option value="กาฬสินธุ์">กาฬสินธุ์</option>
+            <option value="กำแพงเพชร">กำแพงเพชร</option>
+            <option value="ขอนแก่น">ขอนแก่น</option>
+            <option value="จันทบุรี">จันทบุรี</option>
+            <option value="ฉะเชิงเทรา">ฉะเชิงเทรา</option>
+            <option value="ชลบุรี">ชลบุรี</option>
+            <option value="ชัยนาท">ชัยนาท</option>
+            <option value="ชัยภูมิ">ชัยภูมิ</option>
+            <option value="ชุมพร">ชุมพร</option>
+            <option value="เชียงราย">เชียงราย</option>
+            <option value="เชียงใหม่">เชียงใหม่</option>
+            <option value="ตรัง">ตรัง</option>
+            <option value="ตราด">ตราด</option>
+            <option value="ตาก">ตาก</option>
+            <option value="นครนายก">นครนายก</option>
+            <option value="นครปฐม">นครปฐม</option>
+            <option value="นครพนม">นครพนม</option>
+            <option value="นครราชสีมา">นครราชสีมา</option>
+            <option value="นครศรีธรรมราช">นครศรีธรรมราช</option>
+            <option value="นครสวรรค์">นครสวรรค์</option>
+            <option value="นนทบุรี">นนทบุรี</option>
+            <option value="นราธิวาส">นราธิวาส</option>
+            <option value="น่าน">น่าน</option>
+            <option value="บึงกาฬ">บึงกาฬ</option>
+            <option value="บุรีรัมย์">บุรีรัมย์</option>
+            <option value="ปทุมธานี">ปทุมธานี</option>
+            <option value="ประจวบคีรีขันธ์">ประจวบคีรีขันธ์</option>
+            <option value="ปราจีนบุรี">ปราจีนบุรี</option>
+            <option value="ปัตตานี">ปัตตานี</option>
+            <option value="พระนครศรีอยุธยา">พระนครศรีอยุธยา</option>
+            <option value="พะเยา">พะเยา</option>
+            <option value="พังงา">พังงา</option>
+            <option value="พัทลุง">พัทลุง</option>
+            <option value="พิจิตร">พิจิตร</option>
+            <option value="พิษณุโลก">พิษณุโลก</option>
+            <option value="เพชรบุรี">เพชรบุรี</option>
+            <option value="เพชรบูรณ์">เพชรบูรณ์</option>
+            <option value="แพร่">แพร่</option>
+            <option value="ภูเก็ต">ภูเก็ต</option>
+            <option value="มหาสารคาม">มหาสารคาม</option>
+            <option value="มุกดาหาร">มุกดาหาร</option>
+            <option value="แม่ฮ่องสอน">แม่ฮ่องสอน</option>
+            <option value="ยะลา">ยะลา</option>
+            <option value="ยโสธร">ยโสธร</option>
+            <option value="ร้อยเอ็ด">ร้อยเอ็ด</option>
+            <option value="ระนอง">ระนอง</option>
+            <option value="ระยอง">ระยอง</option>
+            <option value="ราชบุรี">ราชบุรี</option>
+            <option value="ลพบุรี">ลพบุรี</option>
+            <option value="ลำปาง">ลำปาง</option>
+            <option value="ลำพูน">ลำพูน</option>
+            <option value="เลย">เลย</option>
+            <option value="ศรีสะเกษ">ศรีสะเกษ</option>
+            <option value="สกลนคร">สกลนคร</option>
+            <option value="สงขลา">สงขลา</option>
+            <option value="สตูล">สตูล</option>
+            <option value="สมุทรปราการ">สมุทรปราการ</option>
+            <option value="สมุทรสงคราม">สมุทรสงคราม</option>
+            <option value="สมุทรสาคร">สมุทรสาคร</option>
+            <option value="สระแก้ว">สระแก้ว</option>
+            <option value="สระบุรี">สระบุรี</option>
+            <option value="สิงห์บุรี">สิงห์บุรี</option>
+            <option value="สุโขทัย">สุโขทัย</option>
+            <option value="สุพรรณบุรี">สุพรรณบุรี</option>
+            <option value="สุราษฎร์ธานี">สุราษฎร์ธานี</option>
+            <option value="สุรินทร์">สุรินทร์</option>
+            <option value="หนองคาย">หนองคาย</option>
+            <option value="หนองบัวลำภู">หนองบัวลำภู</option>
+            <option value="อ่างทอง">อ่างทอง</option>
+            <option value="อำนาจเจริญ">อำนาจเจริญ</option>
+            <option value="อุดรธานี">อุดรธานี</option>
+            <option value="อุตรดิตถ์">อุตรดิตถ์</option>
+            <option value="อุทัยธานี">อุทัยธานี</option>
+            <option value="อุบลราชธานี">อุบลราชธานี</option>
+          </select>
+        </div>
+        </div> <!-- Close manual-plate-wrap -->
         <p class="plate-input-hint" id="plate-input-hint"></p>
       </div>
+
 
       <div class="plate-modal-actions">
         <button type="button" id="plate-cancel-btn" class="plate-btn-cancel">ยกเลิก</button>
@@ -232,6 +376,10 @@
     </div>
   </div>
 
+  <!-- Runtime config: edit frontend/config.js to change the API base URL -->
+  <script src="config.js"></script>
+  <script src="qrious.min.js"></script>
   <script src="app.js"></script>
+
 </body>
 </html>

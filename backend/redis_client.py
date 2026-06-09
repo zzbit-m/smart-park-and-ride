@@ -95,3 +95,9 @@ async def release_slot(slot_id: int) -> None:
     """Return a slot to available (e.g. cancel hold)."""
     redis = get_redis()
     await redis.set(get_slot_key(slot_id), "available")
+
+
+async def occupy_slot(slot_id: int, booking_id: str) -> None:
+    """Mark a slot occupied in Redis (without TTL, representing parked state)."""
+    redis = get_redis()
+    await redis.set(get_slot_key(slot_id), f"occupied:{booking_id}")

@@ -83,8 +83,10 @@
         <h1 class="admin-title">Admin Panel</h1>
         <p class="admin-subtitle">Gate Scanner — เปิดไม้กั้น</p>
       </div>
-      <!-- Logout button -->
-      <button id="logout-btn" class="admin-logout-btn" title="ออกจากระบบ">🔒 Logout</button>
+      <div class="admin-header-actions">
+        <button id="logout-btn" class="admin-action-btn admin-logout-btn" title="ออกจากระบบ">🔒 Logout</button>
+        <button id="export-btn" class="admin-action-btn admin-export-btn" title="Export Data">🔒 Export Data</button>
+      </div>
       <!-- Animated accent line -->
       <div class="admin-header-glow"></div>
     </header>
@@ -340,6 +342,52 @@
           <p class="dash-last-updated" id="dash-last-updated">Auto-refresh every 30 s</p>
         </div>
 
+        <!-- Historical Analytics Stats Row -->
+        <div class="dash-stats-row">
+          <div class="dash-kpi-card dash-kpi-card--duration">
+            <span class="dash-kpi-icon">⏱️</span>
+            <div class="dash-kpi-body">
+              <span class="dash-kpi-label">Avg Duration</span>
+              <span class="dash-kpi-value" id="kpi-avg-duration">—</span>
+            </div>
+          </div>
+          <div class="dash-kpi-card dash-kpi-card--completed">
+            <span class="dash-kpi-icon">🏁</span>
+            <div class="dash-kpi-body">
+              <span class="dash-kpi-label">Completed</span>
+              <span class="dash-kpi-value" id="kpi-completed">—</span>
+            </div>
+          </div>
+          <div class="dash-kpi-card dash-kpi-card--cancelled">
+            <span class="dash-kpi-icon">❌</span>
+            <div class="dash-kpi-body">
+              <span class="dash-kpi-label">Cancelled</span>
+              <span class="dash-kpi-value" id="kpi-cancelled">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Historical Analytics Charts Grid -->
+        <div class="dash-charts-grid">
+          <!-- Peak Hours Card -->
+          <div class="dash-chart-container">
+            <p class="dash-chart-container-title">Peak Hours</p>
+            <p class="dash-chart-container-sub">Hourly distribution of check-ins</p>
+            <div style="position: relative; height: 200px; width: 100%;">
+              <canvas id="peak-hours-chart" aria-label="Peak hours check-ins chart" role="img"></canvas>
+            </div>
+          </div>
+
+          <!-- Daily Traffic Card -->
+          <div class="dash-chart-container">
+            <p class="dash-chart-container-title">Daily Traffic</p>
+            <p class="dash-chart-container-sub">Weekly check-ins trend</p>
+            <div style="position: relative; height: 200px; width: 100%;">
+              <canvas id="daily-traffic-chart" aria-label="Daily traffic check-ins chart" role="img"></canvas>
+            </div>
+          </div>
+        </div>
+
       </div><!-- /panel-dashboard -->
 
     </main>
@@ -351,6 +399,9 @@
 
   </div>
 
+  <!-- Runtime config: edit frontend/config.js to change the API base URL -->
+  <script src="config.js"></script>
   <script src="admin.js"></script>
+
 </body>
 </html>

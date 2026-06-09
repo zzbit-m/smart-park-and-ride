@@ -1,4 +1,3 @@
-import os
 from typing import AsyncGenerator, Optional
 
 from redis.asyncio import ConnectionPool, Redis
@@ -10,13 +9,19 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://parking_user:parking_pass@localhost:5432/parking_db",
-)
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+from config import settings
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+DATABASE_URL = settings.DATABASE_URL
+REDIS_URL = settings.REDIS_URL
+
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_size=15,
+    max_overflow=25,
+    pool_recycle=1800,
+    pool_pre_ping=True,
+)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

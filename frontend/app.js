@@ -1,8 +1,10 @@
 // ── CONFIG ──
-const API = 'http://172.20.10.2:8000';
+// API_BASE is set by frontend/config.js (loaded before this script).
+// Falls back to localhost for safety if config.js is missing.
+const API = (window.APP_CONFIG && window.APP_CONFIG.API_BASE) || 'http://localhost:8000';
 const SLOTS_URL = `${API}/api/slots`;
-const QR_API = 'https://api.qrserver.com/v1/create-qr-code/';
 const ACTIVE_BOOKING_KEY = 'activeBooking';
+
 
 // ── STATE ──
 let state = {
@@ -18,7 +20,7 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo(0, 0);
-  if (id === 'screen-tram') renderTramSchedule();
+  // if (id === 'screen-tram') renderTramSchedule();
   if (id === 'screen-parked') renderParkedScreen();
   // Sync checkout button state every time the scan-out screen is opened
   if (id === 'screen-scanout') syncCheckoutBtn();
@@ -110,8 +112,11 @@ function showBookingTicketModal({ booking_id, slot_code, qr_token, expires_at, l
 
   document.getElementById('ticket-slot-code').textContent = slot_code;
   document.getElementById('ticket-booking-id').textContent = booking_id;
-  document.getElementById('ticket-qr-image').src =
-    `${QR_API}?size=150x150&data=${encodeURIComponent(qr_token)}`;
+  new QRious({
+    element: document.getElementById('ticket-qr-image'),
+    value: qr_token,
+    size: 150
+  });
   document.getElementById('ticket-qr-image').alt = `QR Code for slot ${slot_code}`;
 
   // Show / hide license plate detail row
@@ -186,8 +191,17 @@ async function cancelBookingFromModal() {
     return;
   }
 
+  const headers = {};
+  const userToken = localStorage.getItem('userToken');
+  if (userToken) {
+    headers['Authorization'] = `Bearer ${userToken}`;
+  }
+
   try {
-    const res = await fetch(`${API}/api/slots/${slotId}/hold`, { method: 'DELETE' });
+    const res = await fetch(`${API}/api/slots/${slotId}/hold?qr_token=${encodeURIComponent(booking.qr_token)}`, {
+      method: 'DELETE',
+      headers: headers
+    });
     if (!res.ok) throw new Error(`Cancel failed (${res.status})`);
 
     clearStoredActiveBooking();
@@ -214,26 +228,308 @@ function initTicketModal() {
 let _pendingHoldSlotId = null;
 let _pendingHoldSlotCode = null;
 
-function openPlateModal(slotId, slotCode) {
+function renderSavedVehiclesList(vehicles) {
+  const listContainer = document.getElementById('plate-saved-vehicles-list');
+  const selectionInput = document.getElementById('plate-saved-vehicles');
+  if (!listContainer || !selectionInput) return;
+
+  listContainer.replaceChildren();
+
+  // 1. Render existing vehicles
+  vehicles.forEach(v => {
+    const item = document.createElement('div');
+    item.className = 'saved-vehicle-item';
+    
+    // Check if currently selected
+    const value = `${v.license_plate}|${v.province}`;
+    if (selectionInput.value === value) {
+      item.classList.add('selected');
+    }
+
+    item.innerHTML = `
+      <div class="saved-vehicle-info">
+        <span class="saved-vehicle-plate">${v.license_plate}</span>
+        <span class="saved-vehicle-province">${v.province}</span>
+      </div>
+      <button type="button" class="saved-vehicle-delete-btn" title="ลบประวัติรถ">
+        🗑️
+      </button>
+    `;
+
+    // Click on item info selects it
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.saved-vehicle-delete-btn')) return;
+
+      selectionInput.value = value;
+      document.querySelectorAll('.saved-vehicle-item, .saved-vehicle-new-btn').forEach(el => el.classList.remove('selected'));
+      item.classList.add('selected');
+      syncModalFieldsVisibility();
+    });
+
+    // Delete button click handler
+    const deleteBtn = item.querySelector('.saved-vehicle-delete-btn');
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`ต้องการลบทะเบียนรถ ${v.license_plate} ใช่หรือไม่?`)) return;
+
+      const userToken = localStorage.getItem('userToken');
+      if (!userToken) return;
+
+      let deleteOk = false;
+      try {
+        const delRes = await fetch(`${API}/api/users/vehicles/${v.id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${userToken}` }
+        });
+        if (!delRes.ok) throw new Error('Delete failed');
+        deleteOk = true;
+      } catch (err) {
+        console.error(err);
+        showToast('❌ ลบข้อมูลไม่สำเร็จ');
+      }
+
+      if (!deleteOk) return;
+
+      showToast('✓ ลบข้อมูลสำเร็จ');
+
+      if (selectionInput.value === value) {
+        selectionInput.value = 'new';
+      }
+
+      try {
+        await fetchAndRenderSavedVehicles();
+      } catch (err) {
+        console.warn('Vehicle deleted but list refresh failed:', err);
+      }
+    });
+
+    listContainer.appendChild(item);
+  });
+
+  // 2. Render "+ ระบุทะเบียนรถใหม่" button at the bottom of the list
+  const newBtn = document.createElement('div');
+  newBtn.className = 'saved-vehicle-new-btn';
+  if (selectionInput.value === 'new') {
+    newBtn.classList.add('selected');
+  }
+  newBtn.textContent = '+ ระบุทะเบียนรถใหม่ (Enter new plate)';
+
+  newBtn.addEventListener('click', () => {
+    selectionInput.value = 'new';
+    document.querySelectorAll('.saved-vehicle-item, .saved-vehicle-new-btn').forEach(el => el.classList.remove('selected'));
+    newBtn.classList.add('selected');
+    syncModalFieldsVisibility();
+  });
+
+  listContainer.appendChild(newBtn);
+}
+
+async function fetchAndRenderSavedVehicles() {
+  const userToken = localStorage.getItem('userToken');
+  const selectionInput = document.getElementById('plate-saved-vehicles');
+  if (!userToken) return;
+
+  try {
+    const res = await fetch(`${API}/api/users/vehicles`, {
+      headers: { 'Authorization': `Bearer ${userToken}` }
+    });
+    if (res.status === 401) {
+      localStorage.removeItem('userToken');
+      document.getElementById('saved-vehicles-wrap').style.display = 'none';
+      document.getElementById('phone-input-wrap').style.display = 'block';
+      syncModalFieldsVisibility();
+      return;
+    }
+    if (!res.ok) {
+      document.getElementById('saved-vehicles-wrap').style.display = 'none';
+      syncModalFieldsVisibility();
+      return;
+    }
+
+    const vehicles = await res.json();
+
+    renderSavedVehiclesList(vehicles);
+
+    const validValues = vehicles.map(v => `${v.license_plate}|${v.province}`);
+    if (selectionInput.value !== 'new' && !validValues.includes(selectionInput.value)) {
+      if (vehicles.length > 0) {
+        selectionInput.value = `${vehicles[0].license_plate}|${vehicles[0].province}`;
+        renderSavedVehiclesList(vehicles);
+      } else {
+        selectionInput.value = 'new';
+        renderSavedVehiclesList(vehicles);
+      }
+    }
+
+    document.getElementById('saved-vehicles-wrap').style.display = 'block';
+    document.getElementById('phone-input-wrap').style.display = 'none';
+  } catch (err) {
+    console.warn('Failed to load saved vehicles:', err);
+    document.getElementById('saved-vehicles-wrap').style.display = 'none';
+    syncModalFieldsVisibility();
+    return;
+  }
+
+  syncModalFieldsVisibility();
+}
+
+async function openPlateModal(slotId, slotCode) {
   _pendingHoldSlotId = slotId;
   _pendingHoldSlotCode = slotCode;
 
   const modal = document.getElementById('plate-modal');
-  const input = document.getElementById('plate-input');
+  const lettersInp = document.getElementById('plate-letters');
+  const numberInp = document.getElementById('plate-number');
+  const provinceInp = document.getElementById('plate-province');
+  const phoneInp = document.getElementById('plate-phone');
+  const otpInp = document.getElementById('plate-otp');
   const hint = document.getElementById('plate-input-hint');
+  const otpHint = document.getElementById('otp-input-hint');
   const confirm = document.getElementById('plate-confirm-btn');
+  const requestOtpBtn = document.getElementById('plate-otp-request-btn');
+  const verifyOtpBtn = document.getElementById('plate-otp-verify-btn');
+  const selectionInput = document.getElementById('plate-saved-vehicles');
 
   // Reset state
-  input.value = '';
+  lettersInp.value = '';
+  numberInp.value = '';
+  provinceInp.value = '';
+  phoneInp.value = '';
+  otpInp.value = '';
   hint.textContent = '';
   hint.className = 'plate-input-hint';
+  otpHint.textContent = '';
   confirm.disabled = true;
+  requestOtpBtn.disabled = true;
+  verifyOtpBtn.disabled = true;
+  if (selectionInput) selectionInput.value = 'new';
+
+  // Hide otp input block
+  document.getElementById('otp-input-wrap').style.display = 'none';
 
   modal.hidden = false;
   modal.setAttribute('aria-hidden', 'false');
 
-  // Focus the input after animation
-  setTimeout(() => input.focus(), 80);
+  // Check if authenticated
+  const userToken = localStorage.getItem('userToken');
+  if (userToken) {
+    await fetchAndRenderSavedVehicles();
+  } else {
+    // Hide saved vehicles select
+    document.getElementById('saved-vehicles-wrap').style.display = 'none';
+    // Show phone entry
+    document.getElementById('phone-input-wrap').style.display = 'block';
+    syncModalFieldsVisibility();
+  }
+
+  // Focus the phone input or manual letters input
+  setTimeout(() => {
+    if (document.getElementById('phone-input-wrap').style.display !== 'none') {
+      phoneInp.focus();
+    } else if (document.getElementById('manual-plate-wrap').style.display !== 'none') {
+      lettersInp.focus();
+    }
+  }, 80);
+}
+
+async function refreshModalAfterAuth() {
+  await fetchAndRenderSavedVehicles();
+}
+
+function syncModalFieldsVisibility() {
+  const userToken = localStorage.getItem('userToken');
+  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
+  const isNewVehicle = savedVehiclesSelect.value === 'new';
+
+  if (userToken) {
+    document.getElementById('phone-input-wrap').style.display = 'none';
+    document.getElementById('otp-input-wrap').style.display = 'none';
+    if (isNewVehicle) {
+      document.getElementById('manual-plate-wrap').style.display = 'block';
+    } else {
+      document.getElementById('manual-plate-wrap').style.display = 'none';
+    }
+  } else {
+    document.getElementById('saved-vehicles-wrap').style.display = 'none';
+    document.getElementById('phone-input-wrap').style.display = 'block';
+    document.getElementById('manual-plate-wrap').style.display = 'block';
+  }
+  
+  validateModalInputs();
+}
+
+function validateModalInputs() {
+  const confirm = document.getElementById('plate-confirm-btn');
+  const userToken = localStorage.getItem('userToken');
+  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
+  const hint = document.getElementById('plate-input-hint');
+
+  if (!userToken) {
+    confirm.disabled = true;
+    hint.textContent = 'กรุณากรอกเบอร์โทรศัพท์และยืนยัน OTP ก่อนทำการจอง';
+    hint.className = 'plate-input-hint error';
+    return;
+  }
+
+  const isNewVehicle = savedVehiclesSelect.value === 'new';
+  if (!isNewVehicle) {
+    // Valid saved vehicle is selected
+    confirm.disabled = false;
+    hint.textContent = '';
+    hint.className = 'plate-input-hint';
+    return;
+  }
+
+  // Validate manual inputs
+  const lettersInp = document.getElementById('plate-letters');
+  const numberInp = document.getElementById('plate-number');
+  const provinceInp = document.getElementById('plate-province');
+
+  const lettersVal = lettersInp.value.trim();
+  const numberVal = numberInp.value.trim();
+  const provinceVal = provinceInp.value;
+
+  const lettersOk = /^[1-9]?[ก-ฮ]+$/.test(lettersVal);
+  const numberOk = /^\d+$/.test(numberVal);
+  const provinceOk = provinceVal !== "";
+
+  if (lettersVal.length === 0 && numberVal.length === 0 && provinceVal === "") {
+    confirm.disabled = true;
+    hint.textContent = '';
+    hint.className = 'plate-input-hint';
+    return;
+  }
+
+  if (!lettersOk && lettersVal.length > 0) {
+    confirm.disabled = true;
+    hint.textContent = 'หมวดอักษรต้องเป็นภาษาไทย (สามารถมีตัวเลขนำหน้าได้ เช่น 1กข)';
+    hint.className = 'plate-input-hint error';
+    return;
+  }
+
+  if (!numberOk && numberVal.length > 0) {
+    confirm.disabled = true;
+    hint.textContent = 'เลขทะเบียนต้องเป็นตัวเลขเท่านั้น';
+    hint.className = 'plate-input-hint error';
+    return;
+  }
+
+  if (lettersOk && numberOk && provinceOk) {
+    const combined = `${lettersVal} ${numberVal}`;
+    if (combined.length > 20) {
+      confirm.disabled = true;
+      hint.textContent = 'ทะเบียนรถรวมต้องไม่เกิน 20 ตัวอักษร';
+      hint.className = 'plate-input-hint error';
+    } else {
+      confirm.disabled = false;
+      hint.textContent = '';
+      hint.className = 'plate-input-hint';
+    }
+  } else {
+    confirm.disabled = true;
+    hint.textContent = '';
+    hint.className = 'plate-input-hint';
+  }
 }
 
 function closePlateModal() {
@@ -245,47 +541,154 @@ function closePlateModal() {
 }
 
 function initPlateModal() {
-  const input = document.getElementById('plate-input');
-  const hint = document.getElementById('plate-input-hint');
+  const lettersInp = document.getElementById('plate-letters');
+  const numberInp = document.getElementById('plate-number');
+  const provinceInp = document.getElementById('plate-province');
+  const phoneInp = document.getElementById('plate-phone');
+  const otpInp = document.getElementById('plate-otp');
+  const requestOtpBtn = document.getElementById('plate-otp-request-btn');
+  const verifyOtpBtn = document.getElementById('plate-otp-verify-btn');
+  const savedVehiclesSelect = document.getElementById('plate-saved-vehicles');
+  const otpHint = document.getElementById('otp-input-hint');
   const confirm = document.getElementById('plate-confirm-btn');
 
-  // Live validation: enable confirm only when non-empty
-  input.addEventListener('input', () => {
-    const val = input.value.trim();
-    if (val.length === 0) {
-      confirm.disabled = true;
-      hint.textContent = '';
-      hint.className = 'plate-input-hint';
-    } else if (val.length > 20) {
-      confirm.disabled = true;
-      hint.textContent = 'ทะเบียนรถต้องไม่เกิน 20 ตัวอักษร';
-      hint.className = 'plate-input-hint error';
-    } else {
-      confirm.disabled = false;
-      hint.textContent = '';
-      hint.className = 'plate-input-hint';
+  // Monitor manual plate entry changes
+  lettersInp.addEventListener('input', () => {
+    lettersInp.value = lettersInp.value.replace(/[^0-9ก-ฮ]/g, '');
+    const match = lettersInp.value.match(/^([1-9]?)([ก-ฮ]*)/);
+    lettersInp.value = match ? match[0] : '';
+    validateModalInputs();
+  });
+
+  numberInp.addEventListener('input', () => {
+    numberInp.value = numberInp.value.replace(/[^0-9]/g, '');
+    validateModalInputs();
+  });
+
+  provinceInp.addEventListener('change', () => {
+    validateModalInputs();
+  });
+
+  // Saved vehicles selection change
+  savedVehiclesSelect.addEventListener('change', () => {
+    syncModalFieldsVisibility();
+  });
+
+  // Monitor phone input
+  phoneInp.addEventListener('input', () => {
+    phoneInp.value = phoneInp.value.replace(/[^0-9+]/g, '');
+    const phoneVal = phoneInp.value.trim();
+    requestOtpBtn.disabled = !(phoneVal.length >= 9 && phoneVal.length <= 15 && /^\+?\d+$/.test(phoneVal));
+  });
+
+  // Request OTP click
+  requestOtpBtn.addEventListener('click', async () => {
+    const phone = phoneInp.value.trim();
+    showToast('กำลังส่ง OTP...');
+    try {
+      const res = await fetch(`${API}/api/auth/otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      if (!res.ok) throw new Error('Failed to request OTP');
+      const data = await res.json();
+      
+      showToast('ส่ง OTP เรียบร้อยแล้ว');
+      document.getElementById('otp-input-wrap').style.display = 'block';
+      otpInp.value = '';
+      verifyOtpBtn.disabled = true;
+      otpHint.textContent = '';
+      
+      // Auto-populate OTP for easier dev/testing if available
+      if (data.debug_otp) {
+        otpHint.textContent = `[Debug] OTP is: ${data.debug_otp}`;
+        otpHint.style.color = '#00e5a0';
+      }
+      
+      setTimeout(() => otpInp.focus(), 80);
+    } catch (err) {
+      console.error(err);
+      showToast('❌ ส่ง OTP ไม่สำเร็จ');
+    }
+  });
+
+  // Monitor OTP input
+  otpInp.addEventListener('input', () => {
+    otpInp.value = otpInp.value.replace(/[^0-9]/g, '');
+    verifyOtpBtn.disabled = otpInp.value.length !== 4;
+  });
+
+  // Verify OTP click
+  verifyOtpBtn.addEventListener('click', async () => {
+    const phone = phoneInp.value.trim();
+    const otp = otpInp.value.trim();
+    showToast('กำลังยืนยัน...');
+    try {
+      const res = await fetch(`${API}/api/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'OTP verification failed');
+      }
+      const data = await res.json();
+      
+      // Save token
+      localStorage.setItem('userToken', data.token);
+      showToast('✓ ยืนยันตัวตนสำเร็จ');
+
+      // Refresh plate modal view without resetting fields
+      await refreshModalAfterAuth();
+    } catch (err) {
+      console.error(err);
+      showToast(`❌ ${err.message || 'ยืนยัน OTP ไม่สำเร็จ'}`);
     }
   });
 
   // Enter key submits if confirm is enabled
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !confirm.disabled) {
-      confirm.click();
-    }
+  [lettersInp, numberInp, otpInp, phoneInp].forEach(inp => {
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        if (inp === phoneInp && !requestOtpBtn.disabled) {
+          requestOtpBtn.click();
+        } else if (inp === otpInp && !verifyOtpBtn.disabled) {
+          verifyOtpBtn.click();
+        } else if (!confirm.disabled) {
+          confirm.click();
+        }
+      }
+    });
   });
 
   document.getElementById('plate-cancel-btn').addEventListener('click', closePlateModal);
   document.getElementById('plate-modal-overlay').addEventListener('click', closePlateModal);
 
   confirm.addEventListener('click', async () => {
-    const plate = input.value.trim().toUpperCase();
-    if (!plate) return;
+    const isNewVehicle = savedVehiclesSelect.value === 'new';
+    let licensePlate = '';
+    let province = '';
+
+    const userToken = localStorage.getItem('userToken');
+    if (userToken && !isNewVehicle) {
+      const [plateVal, provVal] = savedVehiclesSelect.value.split('|');
+      licensePlate = plateVal;
+      province = provVal;
+    } else {
+      const lettersVal = lettersInp.value.trim();
+      const numberVal = numberInp.value.trim();
+      province = provinceInp.value;
+      if (!lettersVal || !numberVal || !province) return;
+      licensePlate = `${lettersVal} ${numberVal}`;
+    }
 
     const slotId = _pendingHoldSlotId;
     const slotCode = _pendingHoldSlotCode;
 
     closePlateModal();
-    await holdSlot(slotId, slotCode, plate);
+    await holdSlot(slotId, slotCode, licensePlate, province);
   });
 }
 
@@ -448,7 +851,7 @@ function makeSlotEl(slot) {
 }
 
 // ── HOLD A SLOT ──
-async function holdSlot(slotId, slotCode, licensePlate) {
+async function holdSlot(slotId, slotCode, licensePlate, province) {
   if (hasActiveStoredBooking()) {
     alert('คุณมีการจองที่กำลังใช้งานอยู่แล้ว (You already have an active booking)');
     return;
@@ -456,11 +859,17 @@ async function holdSlot(slotId, slotCode, licensePlate) {
 
   showToast(`กำลังจอง ${slotCode}...`);
 
+  const headers = { 'Content-Type': 'application/json' };
+  const userToken = localStorage.getItem('userToken');
+  if (userToken) {
+    headers['Authorization'] = `Bearer ${userToken}`;
+  }
+
   try {
     const res = await fetch(`${API}/api/slots/${slotId}/hold`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ license_plate: licensePlate }),
+      headers: headers,
+      body: JSON.stringify({ license_plate: licensePlate, province: province }),
     });
 
     if (res.status === 400 || res.status === 409) {
@@ -498,6 +907,7 @@ async function holdSlot(slotId, slotCode, licensePlate) {
       slot_code: data.slot_code,
       qr_token: data.qr_token,
       expires_at: data.expires_at,
+      license_plate: licensePlate,
     });
 
     showToast('✓ จองสำเร็จ');
@@ -522,13 +932,18 @@ function renderQR(token) {
   const box = document.getElementById('qr-box');
   box.innerHTML = `
     <img
-      src="${QR_API}?size=150x150&data=${encodeURIComponent(token)}"
+      id="hold-qr-image"
       alt="Booking QR Code"
       width="150"
       height="150"
       style="border-radius:4px;"
     />
   `;
+  new QRious({
+    element: document.getElementById('hold-qr-image'),
+    value: token,
+    size: 150
+  });
 }
 
 // ── COUNTDOWN ──
@@ -565,7 +980,8 @@ function startCountdown(expiresAt) {
 async function cancelHold() {
   if (!state.activeBooking) return;
   try {
-    await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' });
+    const qrToken = state.activeBooking.qrToken;
+    await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold?qr_token=${encodeURIComponent(qrToken)}`, { method: 'DELETE' });
   } catch (err) {
     console.error(err);
   }
@@ -583,8 +999,11 @@ function renderParkedScreen() {
   const slot = state.parkedSlot || '—';
   document.getElementById('parked-slot-display').textContent = slot;
   document.getElementById('scanout-slot-display').textContent = slot;
-  const mins = Math.floor(Math.random() * 10) + 3;
-  document.getElementById('tram-next-time').textContent = `${mins} นาที`;
+  const tramEl = document.getElementById('tram-next-time');
+  if (tramEl) {
+    const mins = Math.floor(Math.random() * 10) + 3;
+    tramEl.textContent = `${mins} นาที`;
+  }
   syncCheckoutBtn();
 }
 
@@ -613,13 +1032,23 @@ async function checkOut() {
     return;
   }
 
-  if (state.activeBooking) {
-    try {
-      await fetch(`${API}/api/slots/${state.activeBooking.slotId}/hold`, { method: 'DELETE' });
-    } catch (err) {
-      console.error(err);
+  const slotId = booking.slot_id;
+  const qrToken = booking.qr_token;
+
+  try {
+    const res = await fetch(`${API}/api/slots/${slotId}/hold?qr_token=${encodeURIComponent(qrToken)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const detail = errData.detail || 'ไม่สามารถออกจากลานจอดได้';
+      alert(`⚠️ ${detail}\n\nหากคุณนำรถเข้าจอดแล้ว กรุณาสแกนคิวอาร์โค้ดที่เครื่องทางออกเพื่อยืนยันการออกจากช่องจอด`);
+      return;
     }
+  } catch (err) {
+    console.error(err);
+    showToast('🔌 เชื่อมต่อ Server ไม่สำเร็จ');
+    return;
   }
+
   clearInterval(state.countdownTimer);
   hideBookingTicketModal();
   clearStoredActiveBooking();
@@ -637,6 +1066,9 @@ async function checkOut() {
 
 // ── TRAM SCHEDULE (Phase 8 — fetches mock from /api/trams/live) ──
 async function renderTramSchedule() {
+  // Tram features are temporarily disabled
+  return;
+  /*
   const pillText = document.getElementById('tram-live-pill-text');
 
   try {
@@ -657,6 +1089,7 @@ async function renderTramSchedule() {
     // Fail silently — static pill text is already in the HTML
     console.warn('[Tram] Could not fetch live data, showing static placeholder.', err);
   }
+  */
 }
 
 

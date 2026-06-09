@@ -12,30 +12,23 @@ verify_admin_token (FastAPI dependency)
 
 import hmac
 import hashlib
-import os
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from redis_client import get_all_slot_statuses
+from config import settings
+from services.jwt_helper import create_access_token, decode_access_token
+from services.audit import log_audit
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# ── Hardcoded credentials (replace with DB lookup + bcrypt in production) ──
-_ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-_ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "password123")
-
-# Derive a deterministic token from the credentials + a salt so the token
-# is stable across restarts (no JWT library required).
-_SALT = "smart-park-and-ride-admin-salt-v1"
-_EXPECTED_TOKEN: str = hmac.new(
-    _SALT.encode(),
-    f"{_ADMIN_USERNAME}:{_ADMIN_PASSWORD}".encode(),
-    hashlib.sha256,
-).hexdigest()
+# ── Credentials — loaded from settings (validated on startup) ─────────────────
+_ADMIN_USERNAME = settings.ADMIN_USERNAME
+_ADMIN_PASSWORD = settings.ADMIN_PASSWORD
 
 
 # ── Request / response models ──────────────────────────────────────────────────
@@ -55,33 +48,33 @@ class LoginResponse(BaseModel):
 @router.post("/login", response_model=LoginResponse)
 async def admin_login(body: LoginRequest):
     """
-    Authenticate an admin user and return a Bearer token.
+    Authenticate an admin or operator user and return a Bearer JWT token.
     Credentials are compared in constant time to prevent timing attacks.
     """
-    username_ok = hmac.compare_digest(body.username, _ADMIN_USERNAME)
-    password_ok = hmac.compare_digest(body.password, _ADMIN_PASSWORD)
+    admin_username_ok = hmac.compare_digest(body.username, _ADMIN_USERNAME)
+    admin_password_ok = hmac.compare_digest(body.password, _ADMIN_PASSWORD)
 
-    if not (username_ok and password_ok):
+    operator_username_ok = hmac.compare_digest(body.username, settings.OPERATOR_USERNAME)
+    operator_password_ok = hmac.compare_digest(body.password, settings.OPERATOR_PASSWORD)
+
+    if admin_username_ok and admin_password_ok:
+        role = "admin"
+    elif operator_username_ok and operator_password_ok:
+        role = "operator"
+    else:
+        log_audit(body.username, "login_failed", "Invalid credentials provided")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return LoginResponse(token=_EXPECTED_TOKEN, role="admin")
+    token = create_access_token({"sub": body.username, "role": role})
+    log_audit(body.username, "login_success", f"Successful login with role='{role}'")
+    return LoginResponse(token=token, role=role)
 
 
-# ── Reusable auth dependency ────────────────────────────────────────────────────
+# ── Reusable auth dependencies ──────────────────────────────────────────────────
 
-async def verify_admin_token(authorization: str = Header(default="")) -> str:
+async def verify_admin_token(authorization: str = Header(default="")) -> dict:
     """
-    FastAPI dependency — extract and validate the Bearer token.
-
-    Usage:
-        from routers.admin import verify_admin_token
-
-        @router.post("/some-protected-endpoint")
-        async def handler(
-            _: str = Depends(verify_admin_token),
-            db: AsyncSession = Depends(get_db),
-        ):
-            ...
+    FastAPI dependency — extract and validate the Bearer token for admin-only endpoints.
     """
     if not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -90,10 +83,35 @@ async def verify_admin_token(authorization: str = Header(default="")) -> str:
         )
 
     token = authorization.removeprefix("Bearer ").strip()
-    if not hmac.compare_digest(token, _EXPECTED_TOKEN):
+    payload = decode_access_token(token)
+    if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    return token
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    return payload
+
+
+async def verify_operator_token(authorization: str = Header(default="")) -> dict:
+    """
+    FastAPI dependency — extract and validate the Bearer token for admin or operator access.
+    """
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or malformed Authorization header (expected: Bearer <token>)",
+        )
+
+    token = authorization.removeprefix("Bearer ").strip()
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    if payload.get("role") not in ["admin", "operator"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    return payload
 
 
 # ── Stats endpoint ─────────────────────────────────────────────────────────────
@@ -107,7 +125,7 @@ class StatsResponse(BaseModel):
 
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats(
-    _: str = Depends(verify_admin_token),
+    _: dict = Depends(verify_operator_token),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -123,10 +141,11 @@ async def get_stats(
         return StatsResponse(total=0, available=0, held=0, occupied=0)
 
     # 2. Batch-read live status from Redis (one MGET call)
-    raw_statuses: list[str | None] = await get_all_slot_statuses(slot_ids)
+    statuses: dict[int, str] = await get_all_slot_statuses(slot_ids)
 
     counts = {"available": 0, "held": 0, "occupied": 0}
-    for raw in raw_statuses:
+    for slot_id in slot_ids:
+        raw = statuses.get(slot_id, "available")
         if raw is None or raw == "available":
             counts["available"] += 1
         elif raw.startswith("held"):
@@ -143,3 +162,49 @@ async def get_stats(
         occupied=counts["occupied"],
     )
 
+
+@router.get("/export")
+async def export_data(
+    _: dict = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Export slots, bookings, and audit logs (if table exists) as a JSON file download.
+    Protected: requires Admin Bearer token.
+    """
+    # 1. Fetch slots
+    slots_res = await db.execute(text("SELECT * FROM parking_slots ORDER BY slot_code"))
+    slots = [dict(row._mapping) for row in slots_res.fetchall()]
+
+    # 2. Fetch bookings
+    bookings_res = await db.execute(text("SELECT * FROM bookings ORDER BY held_at DESC"))
+    bookings = [dict(row._mapping) for row in bookings_res.fetchall()]
+
+    # 3. Check if audit_logs table exists and fetch if so
+    audit_logs = None
+    table_check = await db.execute(text(
+        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'audit_logs')"
+    ))
+    if table_check.scalar():
+        audit_res = await db.execute(text("SELECT * FROM audit_logs ORDER BY created_at DESC"))
+        audit_logs = [dict(row._mapping) for row in audit_res.fetchall()]
+
+    export_payload = {
+        "slots": slots,
+        "bookings": bookings,
+    }
+    if audit_logs is not None:
+        export_payload["audit_logs"] = audit_logs
+
+    from fastapi.encoders import jsonable_encoder
+    import json
+
+    json_data = json.dumps(jsonable_encoder(export_payload), indent=2, ensure_ascii=False)
+
+    return Response(
+        content=json_data,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": "attachment; filename=smart_park_export.json"
+        }
+    )

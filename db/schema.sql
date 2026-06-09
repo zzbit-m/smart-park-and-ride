@@ -21,6 +21,22 @@ CREATE TABLE users (
 );
 
 -- ============================================================
+-- USER VEHICLES (REGISTRY)
+-- ============================================================
+
+CREATE TABLE user_vehicles (
+    id              SERIAL PRIMARY KEY,
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    license_plate   VARCHAR(20) NOT NULL,
+    province        VARCHAR(100) NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, license_plate, province)
+);
+
+CREATE INDEX idx_user_vehicles_user ON user_vehicles(user_id);
+
+
+-- ============================================================
 -- PARKING ZONES & SLOTS
 -- ============================================================
 
