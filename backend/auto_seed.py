@@ -32,80 +32,83 @@ async def auto_seed() -> None:
     Seed zones, placeholder user, and parking slots if the table is empty.
     Safe to call on every startup — exits immediately when data already exists.
     """
-    async with AsyncSessionLocal() as db:
-        # ── Guard: skip entirely if any slot already exists ──────────────────
-        result = await db.execute(text("SELECT COUNT(*) FROM parking_slots"))
-        count = result.scalar_one()
-        if count > 0:
-            logger.info("[seed] parking_slots has %d rows — skipping auto-seed.", count)
-            return
+    try:
+        async with AsyncSessionLocal() as db:
+            # ── Guard: skip entirely if any slot already exists ──────────────────
+            result = await db.execute(text("SELECT COUNT(*) FROM parking_slots"))
+            count = result.scalar_one()
+            if count > 0:
+                logger.info("[seed] parking_slots has %d rows — skipping auto-seed.", count)
+                return
 
-        logger.info("[seed] parking_slots is empty — running auto-seed …")
+            logger.info("[seed] parking_slots is empty — running auto-seed …")
 
-        # ── 1. Ensure placeholder user exists ────────────────────────────────
-        await db.execute(
-            text("""
-                INSERT INTO users (id, phone, display_name, role)
-                VALUES (:id, '0000000000', 'Dev User', 'user')
-                ON CONFLICT (id) DO NOTHING
-            """),
-            {"id": PLACEHOLDER_USER_ID},
-        )
+            # ── 1. Ensure placeholder user exists ────────────────────────────────
+            await db.execute(
+                text("""
+                    INSERT INTO users (id, phone, display_name, role)
+                    VALUES (:id, '0000000000', 'Dev User', 'user')
+                    ON CONFLICT (id) DO NOTHING
+                """),
+                {"id": PLACEHOLDER_USER_ID},
+            )
 
-        # ── 2. Upsert zones and collect their IDs ────────────────────────────
-        zone_ids: dict[str, int] = {}
-        for zone_name, tram_stop, _ in _SEED_DATA:
-            if zone_name in zone_ids:
-                continue
+            # ── 2. Upsert zones and collect their IDs ────────────────────────────
+            zone_ids: dict[str, int] = {}
+            for zone_name, tram_stop, _ in _SEED_DATA:
+                if zone_name in zone_ids:
+                    continue
 
-            # Try to find an existing zone first
-            row = (await db.execute(
-                text("SELECT id FROM parking_zones WHERE name = :name"),
-                {"name": zone_name},
-            )).fetchone()
+                # Try to find an existing zone first
+                row = (await db.execute(
+                    text("SELECT id FROM parking_zones WHERE name = :name"),
+                    {"name": zone_name},
+                )).fetchone()
 
-            if row:
-                zone_ids[zone_name] = row.id
-            else:
+                if row:
+                    zone_ids[zone_name] = row.id
+                else:
+                    row = (await db.execute(
+                        text("""
+                            INSERT INTO parking_zones (name, tram_stop, total_slots)
+                            VALUES (:name, :tram_stop, 10)
+                            RETURNING id
+                        """),
+                        {"name": zone_name, "tram_stop": tram_stop},
+                    )).fetchone()
+                    zone_ids[zone_name] = row.id
+
+            # ── 3. Insert slots (idempotent via ON CONFLICT DO NOTHING) ──────────
+            slots_created: list[tuple[int, str]] = []   # [(slot_id, slot_code)]
+            for zone_name, _, slot_code in _SEED_DATA:
                 row = (await db.execute(
                     text("""
-                        INSERT INTO parking_zones (name, tram_stop, total_slots)
-                        VALUES (:name, :tram_stop, 10)
+                        INSERT INTO parking_slots (zone_id, slot_code, last_known_status)
+                        VALUES (:zone_id, :slot_code, 'available')
+                        ON CONFLICT (slot_code) DO NOTHING
                         RETURNING id
                     """),
-                    {"name": zone_name, "tram_stop": tram_stop},
+                    {"zone_id": zone_ids[zone_name], "slot_code": slot_code},
                 )).fetchone()
-                zone_ids[zone_name] = row.id
 
-        # ── 3. Insert slots (idempotent via ON CONFLICT DO NOTHING) ──────────
-        slots_created: list[tuple[int, str]] = []   # [(slot_id, slot_code)]
-        for zone_name, _, slot_code in _SEED_DATA:
-            row = (await db.execute(
-                text("""
-                    INSERT INTO parking_slots (zone_id, slot_code, last_known_status)
-                    VALUES (:zone_id, :slot_code, 'available')
-                    ON CONFLICT (slot_code) DO NOTHING
-                    RETURNING id
-                """),
-                {"zone_id": zone_ids[zone_name], "slot_code": slot_code},
-            )).fetchone()
+                if row:
+                    slots_created.append((row.id, slot_code))
 
-            if row:
-                slots_created.append((row.id, slot_code))
+            await db.commit()
 
-        await db.commit()
+            # ── 4. Initialise Redis keys for every new slot ───────────────────────
+            redis = get_redis()
+            for slot_id, slot_code in slots_created:
+                await redis.set(get_slot_key(slot_id), "available")
 
-        # ── 4. Initialise Redis keys for every new slot ───────────────────────
-        redis = get_redis()
-        for slot_id, slot_code in slots_created:
-            await redis.set(get_slot_key(slot_id), "available")
+            if slots_created:
+                from services.audit import log_audit
+                log_audit("system", "auto_seed", f"Auto-seeded {len(slots_created)} parking slots and placeholder user")
 
-        if slots_created:
-            from services.audit import log_audit
-            log_audit("system", "auto_seed", f"Auto-seeded {len(slots_created)} parking slots and placeholder user")
-
-        logger.info(
-            "[seed] Auto-seed complete — %d slots created: %s",
-            len(slots_created),
-            ", ".join(code for _, code in slots_created),
-        )
+            logger.info(
+                "[seed] Auto-seed complete — %d slots created: %s",
+                len(slots_created),
+                ", ".join(code for _, code in slots_created),
+            )
+    except Exception as exc:
+        logger.error("[seed] Auto-seed failed on startup: %s", exc, exc_info=True)

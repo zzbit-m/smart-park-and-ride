@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
 from database import AsyncSessionLocal, get_redis
 from redis_client import get_slot_key, release_slot, delete_qr_token_lookup

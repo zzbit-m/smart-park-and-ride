@@ -13,7 +13,9 @@ from services.jwt_helper import decode_access_token
 
 @pytest.mark.asyncio
 @patch("routers.auth.get_redis")
-async def test_request_otp(mock_get_redis):
+@patch("routers.auth.settings")
+async def test_request_otp(mock_settings, mock_get_redis):
+    mock_settings.DEBUG_OTP = True
     # Mock Redis client
     mock_redis = AsyncMock()
     mock_get_redis.return_value = mock_redis

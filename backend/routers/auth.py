@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db, get_redis
 from services.jwt_helper import create_access_token
+from config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -45,11 +46,9 @@ async def request_otp(body: OTPRequest):
     
     logger.info(f"[OTP] Generated secure OTP for phone {phone}")
     
-    is_production = os.getenv("ENV", "").lower() == "production"
-    
     return OTPResponse(
         message="OTP sent successfully",
-        debug_otp=None if is_production else otp
+        debug_otp=otp if settings.DEBUG_OTP else None
     )
 
 

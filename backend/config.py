@@ -1,9 +1,10 @@
 import os
 import warnings
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Load environment variables from .env if present
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 class Settings:
     DATABASE_URL: str = os.getenv(
@@ -38,6 +39,7 @@ class Settings:
     WINDOW_HOLD: int = int(os.getenv("WINDOW_HOLD", "60"))
     LIMIT_SCAN: int = int(os.getenv("LIMIT_SCAN", "60"))
     WINDOW_SCAN: int = int(os.getenv("WINDOW_SCAN", "60"))
+    DEBUG_OTP: bool = os.getenv("DEBUG_OTP", "True").lower() in ("true", "1", "yes")
 
     # Monitoring and backup settings
     SENTRY_DSN: str | None = os.getenv("SENTRY_DSN")
