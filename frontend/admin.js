@@ -17,6 +17,9 @@ const API_MANUAL_RELEASE = `${API_BASE}/api/slots/manual-release`;
 const API_STATS = `${API_BASE}/api/admin/stats`;
 const API_ANALYTICS = `${API_BASE}/api/slots/analytics`;
 const API_EXPORT_SUMMARY = `${API_BASE}/api/admin/export/summary`;
+const API_LAYOUT_CURRENT = `${API_BASE}/api/admin/layout/current`;
+const API_LAYOUT_DIFF    = `${API_BASE}/api/admin/layout/diff`;
+const API_LAYOUT_UPLOAD  = `${API_BASE}/api/admin/layout/upload`;
 
 const TOKEN_KEY = 'adminToken';
 
@@ -479,6 +482,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
   /* ── Dashboard module ── */
   initDashboard();
+
+  /* ── Layout module ── */
+  initLayoutTab();
 });
 
 /* ══════════════════════════════════════════════════════
@@ -700,33 +706,44 @@ async function handleCameraAction(mode) {
 function initTabNav() {
   const tabScanner   = getEl('tab-scanner');
   const tabDashboard = getEl('tab-dashboard');
+  const tabLayout    = getEl('tab-layout');
   const panelScanner   = getEl('panel-scanner');
   const panelDashboard = getEl('panel-dashboard');
+  const panelLayout    = getEl('panel-layout');
 
   if (!tabScanner || !tabDashboard) return;
 
   function activateTab(tab) {
-    const isScanner = (tab === tabScanner);
+    const isScanner   = (tab === tabScanner);
+    const isDashboard = (tab === tabDashboard);
+    const isLayout    = (tab === tabLayout);
 
-    // Update tab buttons
     tabScanner.classList.toggle('admin-tab--active', isScanner);
     tabScanner.setAttribute('aria-selected', String(isScanner));
-    tabDashboard.classList.toggle('admin-tab--active', !isScanner);
-    tabDashboard.setAttribute('aria-selected', String(!isScanner));
+    tabDashboard.classList.toggle('admin-tab--active', isDashboard);
+    tabDashboard.setAttribute('aria-selected', String(isDashboard));
+    if (tabLayout) {
+      tabLayout.classList.toggle('admin-tab--active', isLayout);
+      tabLayout.setAttribute('aria-selected', String(isLayout));
+    }
 
-    // Show / hide panels
     panelScanner.hidden   = !isScanner;
-    panelDashboard.hidden = isScanner;
+    panelDashboard.hidden = !isDashboard;
+    if (panelLayout) panelLayout.hidden = !isLayout;
 
-    // If leaving scanner → stop camera
     if (!isScanner && _cameraActive) stopCamera();
 
-    // If entering dashboard → fetch fresh stats
-    if (!isScanner) { fetchStats(); fetchSummary(); }
+    if (isDashboard) { fetchStats(); fetchSummary(); }
+    if (isLayout) { fetchCurrentLayout(); }
   }
 
   tabScanner.addEventListener('click',   () => activateTab(tabScanner));
   tabDashboard.addEventListener('click', () => activateTab(tabDashboard));
+  if (tabLayout) {
+    tabLayout.addEventListener('click', () => {
+      window.location.href = `${API_BASE}/admin-layout/`;
+    });
+  }
 }
 
 /* ══════════════════════════════════════════════════════
@@ -1185,5 +1202,382 @@ function updateLegend(data) {
   setTxt('legend-available-pct', pct(data.available));
   setTxt('legend-held-pct',      pct(data.held));
   setTxt('legend-occupied-pct',  pct(data.occupied));
+}
+
+/* ══════════════════════════════════════════════════════
+   LAYOUT MODULE — View current layout, preview diff, upload
+   GET  /api/admin/layout/current
+   POST /api/admin/layout/diff
+   POST /api/admin/layout/upload
+══════════════════════════════════════════════════════ */
+
+let _layoutZoneCount = 0;
+
+function initLayoutTab() {
+  const refreshBtn = getEl('layout-refresh-btn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', fetchCurrentLayout);
+  }
+
+  getEl('layout-add-zone-btn').addEventListener('click', addLayoutZone);
+  getEl('layout-preview-btn').addEventListener('click', previewLayout);
+  getEl('layout-apply-btn').addEventListener('click', applyLayout);
+
+  addLayoutZone(); // start with one empty zone row
+}
+
+/* ── Fetch current layout ── */
+async function fetchCurrentLayout() {
+  const subEl = getEl('layout-current-sub');
+  const bodyEl = getEl('layout-current-body');
+  if (subEl) subEl.textContent = 'Loading...';
+  if (bodyEl) bodyEl.innerHTML = '';
+
+  try {
+    const res = await fetch(API_LAYOUT_CURRENT, {
+      method: 'GET',
+      headers: authHeaders(),
+    });
+
+    if (res.status === 401) { handle401(); return; }
+
+    if (!res.ok) {
+      if (subEl) subEl.textContent = `Error ${res.status}`;
+      return;
+    }
+
+    const data = await res.json();
+    renderCurrentLayout(data);
+  } catch (err) {
+    console.error('[Layout] fetch error:', err);
+    if (subEl) subEl.textContent = 'Network error';
+  }
+}
+
+function renderCurrentLayout(data) {
+  const subEl = getEl('layout-current-sub');
+  const bodyEl = getEl('layout-current-body');
+  if (!bodyEl) return;
+
+  // Response is nested: { layout: { ... } } or directly the layout object
+  const layout = data && data.layout ? data.layout : data;
+
+  if (!layout) {
+    if (subEl) subEl.textContent = 'No layout found';
+    bodyEl.innerHTML = '<p style="color:#6b7a99;font-size:13px;padding:12px 0;">No layout applied yet.</p>';
+    getEl('layout-version').value = 1;
+    return;
+  }
+
+  const config = layout.config || {};
+  const zones = config.zones || layout.zones || [];
+  const zoneRows = zones.map(z =>
+    `<tr><td style="color:#e8edf5;padding:4px 8px;">${z.zone_name}</td><td style="color:#8b9ab5;padding:4px 8px;">${z.rows} × ${z.cols}</td><td style="color:#8b9ab5;padding:4px 8px;">${z.slot_prefix}</td><td style="color:#8b9ab5;padding:4px 8px;">${z.slot_type || 'standard'}</td></tr>`
+  ).join('');
+
+  bodyEl.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;padding:12px 0;">
+      <div><span style="color:#6b7a99;font-size:11px;">Version</span><br><span style="color:#e8edf5;font-size:20px;font-weight:600;">${layout.version || '—'}</span></div>
+      <div><span style="color:#6b7a99;font-size:11px;">Label</span><br><span style="color:#e8edf5;font-size:16px;">${layout.label || '—'}</span></div>
+      <div><span style="color:#6b7a99;font-size:11px;">Zones</span><br><span style="color:#e8edf5;font-size:20px;font-weight:600;">${zones.length}</span></div>
+      <div><span style="color:#6b7a99;font-size:11px;">Layout ID</span><br><span style="color:#8b9ab5;font-size:14px;font-family:DM Mono;">${layout.id || '—'}</span></div>
+    </div>
+    ${zoneRows.length ? `
+    <table style="width:100%;border-collapse:collapse;margin-top:4px;">
+      <thead><tr style="border-bottom:1px solid #2a3a52;">
+        <th style="color:#6b7a99;font-size:10px;text-align:left;padding:4px 8px;text-transform:uppercase;">Zone</th>
+        <th style="color:#6b7a99;font-size:10px;text-align:left;padding:4px 8px;text-transform:uppercase;">Grid</th>
+        <th style="color:#6b7a99;font-size:10px;text-align:left;padding:4px 8px;text-transform:uppercase;">Prefix</th>
+        <th style="color:#6b7a99;font-size:10px;text-align:left;padding:4px 8px;text-transform:uppercase;">Type</th>
+      </tr></thead>
+      <tbody>${zoneRows}</tbody>
+    </table>` : ''}
+  `;
+
+  if (subEl) subEl.textContent = `v${layout.version} — ${layout.label || 'Unnamed'}`;
+
+  // Pre-fill form from current layout
+  getEl('layout-version').value = (layout.version || 0) + 1;
+  getEl('layout-label').value = `v${(layout.version || 0) + 1}`;
+
+  // Clear existing zone rows and populate from current config
+  const container = getEl('layout-zones-container');
+  container.innerHTML = '';
+  _layoutZoneCount = 0;
+  if (zones.length) {
+    zones.forEach(z => addLayoutZone(z));
+  } else {
+    addLayoutZone();
+  }
+}
+
+/* ── Zone form row management ── */
+
+function addLayoutZone(prefill) {
+  _layoutZoneCount++;
+  const id = _layoutZoneCount;
+  const container = getEl('layout-zones-container');
+  const row = document.createElement('div');
+  row.id = `zone-row-${id}`;
+  row.style.cssText = 'display:flex;gap:8px;align-items:end;padding:8px 0;border-bottom:1px solid #1e293b;flex-wrap:wrap;';
+
+  const name = prefill ? prefill.zone_name || '' : '';
+  const rows = prefill ? prefill.rows || 1 : 1;
+  const cols = prefill ? prefill.cols || 5 : 5;
+  const prefix = prefill ? prefill.slot_prefix || '' : '';
+  const type = prefill ? prefill.slot_type || 'standard' : 'standard';
+
+  row.innerHTML = `
+    <div style="flex:2;min-width:100px;">
+      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">ZONE NAME</label>
+      <input id="zone-name-${id}" class="scan-input" style="width:100%;" placeholder="Zone A" value="${name}" />
+    </div>
+    <div style="flex:1;min-width:60px;">
+      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">ROWS</label>
+      <input id="zone-rows-${id}" type="number" min="1" class="scan-input" style="width:100%;" value="${rows}" />
+    </div>
+    <div style="flex:1;min-width:60px;">
+      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">COLS</label>
+      <input id="zone-cols-${id}" type="number" min="1" class="scan-input" style="width:100%;" value="${cols}" />
+    </div>
+    <div style="flex:1;min-width:60px;">
+      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">PREFIX</label>
+      <input id="zone-prefix-${id}" class="scan-input" style="width:100%;" placeholder="A" maxlength="5" value="${prefix}" />
+    </div>
+    <div style="flex:1;min-width:80px;">
+      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">TYPE</label>
+      <select id="zone-type-${id}" class="scan-input" style="width:100%;cursor:pointer;">
+        <option value="standard" ${type === 'standard' ? 'selected' : ''}>Standard</option>
+        <option value="disabled" ${type === 'disabled' ? 'selected' : ''}>Disabled</option>
+        <option value="EV" ${type === 'EV' ? 'selected' : ''}>EV</option>
+        <option value="motorcycle" ${type === 'motorcycle' ? 'selected' : ''}>Motorcycle</option>
+      </select>
+    </div>
+    <button id="zone-remove-${id}" class="btn-manual-release" style="flex:0 0 auto;padding:6px 10px;" title="Remove zone">
+      <span class="btn-manual-icon">✕</span>
+    </button>
+  `;
+  container.appendChild(row);
+
+  getEl(`zone-remove-${id}`).addEventListener('click', () => {
+    row.remove();
+    updateTotalSlots();
+  });
+
+  // Recalculate total when rows/cols change
+  getEl(`zone-rows-${id}`).addEventListener('input', updateTotalSlots);
+  getEl(`zone-cols-${id}`).addEventListener('input', updateTotalSlots);
+
+  updateTotalSlots();
+}
+
+function updateTotalSlots() {
+  const zones = collectLayoutZones();
+  const total = zones.reduce((sum, z) => sum + (z.rows || 1) * (z.cols || 1), 0);
+  const countEl = getEl('layout-total-count');
+  if (countEl) countEl.textContent = total;
+}
+
+/* ── Collect zone data from form ── */
+function collectLayoutZones() {
+  const zones = [];
+  const container = getEl('layout-zones-container');
+  const rows = container.querySelectorAll('[id^="zone-row-"]');
+  rows.forEach(row => {
+    const id = row.id.replace('zone-row-', '');
+    const nameEl = getEl(`zone-name-${id}`);
+    const rowsEl = getEl(`zone-rows-${id}`);
+    const colsEl = getEl(`zone-cols-${id}`);
+    const prefixEl = getEl(`zone-prefix-${id}`);
+    const typeEl = getEl(`zone-type-${id}`);
+    if (!nameEl || !rowsEl || !colsEl || !prefixEl || !typeEl) return;
+    const name = nameEl.value.trim();
+    if (!name) return;
+    zones.push({
+      zone_name: name,
+      rows: parseInt(rowsEl.value, 10) || 1,
+      cols: parseInt(colsEl.value, 10) || 1,
+      slot_prefix: prefixEl.value.trim().toUpperCase() || name.replace(/[^A-Z]/gi, '').slice(0, 1).toUpperCase(),
+      slot_type: typeEl.value,
+    });
+  });
+  return zones;
+}
+
+/* ── Preview layout diff ── */
+async function previewLayout() {
+  hideLayoutResult();
+  const zones = collectLayoutZones();
+  if (!zones.length) {
+    showLayoutResult('error', '⚠️ Please add at least one zone.');
+    return;
+  }
+
+  const version = parseInt(getEl('layout-version').value, 10) || 1;
+  const label = getEl('layout-label').value.trim() || `Layout v${version}`;
+  const config = { version, label, zones };
+
+  const previewBtn = getEl('layout-preview-btn');
+  previewBtn.disabled = true;
+  previewBtn.querySelector('.btn-scan-text').textContent = 'Previewing...';
+
+  try {
+    const res = await fetch(API_LAYOUT_DIFF, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(config),
+    });
+
+    if (res.status === 401) { handle401(); return; }
+
+    const data = await res.json();
+    renderLayoutResult('diff', data);
+  } catch (err) {
+    console.error('[Layout] preview error:', err);
+    showLayoutResult('error', '🔌 Network error — could not reach server.');
+  } finally {
+    previewBtn.disabled = false;
+    previewBtn.querySelector('.btn-scan-text').textContent = 'Preview Diff';
+  }
+}
+
+/* ── Apply layout ── */
+async function applyLayout() {
+  hideLayoutResult();
+  const zones = collectLayoutZones();
+  if (!zones.length) {
+    showLayoutResult('error', '⚠️ Please add at least one zone.');
+    return;
+  }
+
+  const version = parseInt(getEl('layout-version').value, 10) || 1;
+  const label = getEl('layout-label').value.trim() || `Layout v${version}`;
+  const config = { version, label, zones };
+
+  const applyBtn = getEl('layout-apply-btn');
+  applyBtn.disabled = true;
+  applyBtn.querySelector('.btn-scan-text').textContent = 'Applying...';
+
+  try {
+    const res = await fetch(API_LAYOUT_UPLOAD, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(config),
+    });
+
+    if (res.status === 401) { handle401(); return; }
+
+    const data = await res.json();
+    renderLayoutResult(res.ok ? 'success' : 'error', data);
+    if (res.ok) {
+      // Refresh current layout info
+      setTimeout(fetchCurrentLayout, 500);
+    }
+  } catch (err) {
+    console.error('[Layout] apply error:', err);
+    showLayoutResult('error', '🔌 Network error — could not reach server.');
+  } finally {
+    applyBtn.disabled = false;
+    applyBtn.querySelector('.btn-scan-text').textContent = 'Apply Layout';
+  }
+}
+
+/* ── Render diff/result in the result box ── */
+function renderLayoutResult(type, data) {
+  const el = getEl('layout-result');
+  el.className = 'scan-result scan-result--visible';
+
+  if (type === 'error') {
+    el.classList.add('scan-result--error');
+    const detail = data.detail || data.message || 'Unknown error';
+    if (typeof detail === 'object') {
+      const conflicts = detail.conflicts || [];
+      let html = `<div style="font-size:14px;font-weight:600;margin-bottom:8px;">❌ Layout rejected</div>`;
+      html += `<div style="display:flex;gap:16px;font-size:13px;margin-bottom:6px;">
+        <span>${detail.slots_created || 0} created</span>
+        <span style="color:#ff4d6d;">${detail.slots_removed || 0} removed</span>
+        <span>${detail.slots_unchanged || 0} unchanged</span>
+      </div>`;
+      if (conflicts.length) {
+        html += `<div style="background:rgba(255,77,109,0.1);border:1px solid #ff4d6d;border-radius:6px;padding:8px;margin-top:6px;font-size:12px;color:#ff4d6d;">
+          ⚠️ ${conflicts.length} conflict(s) — active bookings on: ${conflicts.map(c => c.slot_code).join(', ')}
+        </div>`;
+        html += '<p style="color:#ff4d6d;font-size:11px;margin-top:4px;">Release or complete these bookings before applying.</p>';
+      }
+      el.innerHTML = html;
+    } else {
+      el.innerHTML = `❌ ${detail}`;
+    }
+    return;
+  }
+
+  if (type === 'diff') {
+    const created = data.slots_to_create || [];
+    const removed = data.slots_to_remove || [];
+    const conflicts = data.conflicts || [];
+    const unchanged = data.unchanged || 0;
+
+    el.classList.add('scan-result--success');
+
+    let html = `<div style="font-size:14px;font-weight:600;margin-bottom:8px;">🔍 Preview — ${data.dry_run ? 'Dry run' : 'Result'}</div>`;
+
+    if (conflicts.length) {
+      html += `<div style="background:rgba(255,77,109,0.1);border:1px solid #ff4d6d;border-radius:6px;padding:8px;margin-bottom:8px;font-size:12px;color:#ff4d6d;">
+        ⚠️ ${conflicts.length} conflict(s) — active bookings on: ${conflicts.map(c => c.slot_code).join(', ')}
+      </div>`;
+    }
+
+    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><tbody>';
+    html += `<tr style="border-bottom:1px solid #2a3a52;"><td style="padding:4px 8px;color:#8b9ab5;">Version</td><td style="padding:4px 8px;color:#e8edf5;">${data.version || '—'}</td></tr>`;
+    html += `<tr style="border-bottom:1px solid #2a3a52;"><td style="padding:4px 8px;color:#8b9ab5;">Zones</td><td style="padding:4px 8px;color:#e8edf5;">${data.zones || '—'}</td></tr>`;
+    html += `<tr style="border-bottom:1px solid #2a3a52;"><td style="padding:4px 8px;color:#8b9ab5;">Slots to create</td><td style="padding:4px 8px;color:#00e5a0;">${created.length}</td></tr>`;
+    html += created.length ? `<tr style="border-bottom:1px solid #2a3a52;"><td style="padding:4px 8px;color:#8b9ab5;"></td><td style="padding:4px 8px;font-family:DM Mono;font-size:11px;color:#6b7a99;word-break:break-all;">${created.join(', ')}</td></tr>` : '';
+    html += `<tr style="border-bottom:1px solid #2a3a52;"><td style="padding:4px 8px;color:#8b9ab5;">Slots to remove</td><td style="padding:4px 8px;color:#ff4d6d;">${removed.length}</td></tr>`;
+    html += removed.length ? `<tr style="border-bottom:1px solid #2a3a52;"><td style="padding:4px 8px;color:#8b9ab5;"></td><td style="padding:4px 8px;font-family:DM Mono;font-size:11px;color:#6b7a99;word-break:break-all;">${removed.join(', ')}</td></tr>` : '';
+    html += `<tr><td style="padding:4px 8px;color:#8b9ab5;">Unchanged</td><td style="padding:4px 8px;color:#e8edf5;">${unchanged}</td></tr>`;
+    html += '</tbody></table>';
+
+    if (conflicts.length) {
+      html += '<p style="color:#ff4d6d;font-size:11px;margin-top:8px;">⚠️ Resolve conflicts before applying.</p>';
+    }
+
+    el.innerHTML = html;
+    return;
+  }
+
+  if (type === 'success') {
+    el.classList.add('scan-result--success');
+    const created = data.slots_created || 0;
+    const removed = data.slots_removed || 0;
+    const unchanged = data.slots_unchanged || 0;
+    const version = data.version || '—';
+    el.innerHTML = `
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px;">✅ Layout v${version} applied</div>
+      <div style="display:flex;gap:16px;font-size:13px;">
+        <span style="color:#00e5a0;">+${created} created</span>
+        <span style="color:#ff4d6d;">−${removed} removed</span>
+        <span style="color:#8b9ab5;">${unchanged} unchanged</span>
+      </div>
+    `;
+  }
+}
+
+function showLayoutResult(type, message) {
+  const el = getEl('layout-result');
+  el.className = 'scan-result scan-result--visible';
+  el.classList.add(`scan-result--${type}`);
+  el.textContent = message;
+
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => {
+    el.classList.remove('scan-result--visible');
+  }, 8000);
+}
+
+function hideLayoutResult() {
+  const el = getEl('layout-result');
+  el.className = 'scan-result';
+  el.innerHTML = '';
+  clearTimeout(el._hideTimer);
 }
 

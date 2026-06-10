@@ -20,14 +20,29 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # Create ENUM types
-    op.execute(sa.text("CREATE TYPE slot_status AS ENUM ('available', 'held', 'occupied')"))
-    op.execute(sa.text("CREATE TYPE booking_status AS ENUM ('held', 'confirmed', 'completed', 'expired', 'no_show')"))
-    op.execute(sa.text("CREATE TYPE user_role AS ENUM ('user', 'admin', 'dispatcher')"))
-    
+    # Create ENUM types (PG15 lacks IF NOT EXISTS for CREATE TYPE)
+    op.execute(sa.text("""
+        DO $$ BEGIN
+            CREATE TYPE slot_status AS ENUM ('available', 'held', 'occupied');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+    """))
+    op.execute(sa.text("""
+        DO $$ BEGIN
+            CREATE TYPE booking_status AS ENUM ('held', 'confirmed', 'completed', 'expired', 'no_show');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+    """))
+    op.execute(sa.text("""
+        DO $$ BEGIN
+            CREATE TYPE user_role AS ENUM ('user', 'admin', 'dispatcher');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+    """))
+
     # Create Tables
     op.execute(sa.text("""
-        CREATE TABLE users (
+        CREATE TABLE IF NOT EXISTS users (
             id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             phone           VARCHAR(20) UNIQUE NOT NULL,
             display_name    VARCHAR(100),
@@ -39,7 +54,7 @@ def upgrade() -> None:
     """))
     
     op.execute(sa.text("""
-        CREATE TABLE parking_zones (
+        CREATE TABLE IF NOT EXISTS parking_zones (
             id          SERIAL PRIMARY KEY,
             name        VARCHAR(50) NOT NULL,
             tram_stop   VARCHAR(100),
@@ -48,7 +63,7 @@ def upgrade() -> None:
     """))
     
     op.execute(sa.text("""
-        CREATE TABLE parking_slots (
+        CREATE TABLE IF NOT EXISTS parking_slots (
             id          SERIAL PRIMARY KEY,
             zone_id     INT NOT NULL REFERENCES parking_zones(id),
             slot_code   VARCHAR(20) NOT NULL UNIQUE,
@@ -57,10 +72,10 @@ def upgrade() -> None:
         )
     """))
     
-    op.execute(sa.text("CREATE INDEX idx_slots_zone ON parking_slots(zone_id)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_slots_zone ON parking_slots(zone_id)"))
 
     op.execute(sa.text("""
-        CREATE TABLE bookings (
+        CREATE TABLE IF NOT EXISTS bookings (
             id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id         UUID NOT NULL REFERENCES users(id),
             slot_id         INT NOT NULL REFERENCES parking_slots(id),
@@ -75,13 +90,13 @@ def upgrade() -> None:
         )
     """))
     
-    op.execute(sa.text("CREATE INDEX idx_bookings_user ON bookings(user_id)"))
-    op.execute(sa.text("CREATE INDEX idx_bookings_slot ON bookings(slot_id)"))
-    op.execute(sa.text("CREATE INDEX idx_bookings_status ON bookings(status)"))
-    op.execute(sa.text("CREATE INDEX idx_bookings_expires ON bookings(expires_at) WHERE status = 'held'"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings(user_id)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_bookings_slot ON bookings(slot_id)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_bookings_expires ON bookings(expires_at) WHERE status = 'held'"))
 
     op.execute(sa.text("""
-        CREATE TABLE penalty_events (
+        CREATE TABLE IF NOT EXISTS penalty_events (
             id          SERIAL PRIMARY KEY,
             user_id     UUID NOT NULL REFERENCES users(id),
             booking_id  UUID NOT NULL REFERENCES bookings(id),
@@ -91,7 +106,7 @@ def upgrade() -> None:
     """))
 
     op.execute(sa.text("""
-        CREATE TABLE trams (
+        CREATE TABLE IF NOT EXISTS trams (
             id          SERIAL PRIMARY KEY,
             tram_code   VARCHAR(20) UNIQUE NOT NULL,
             capacity    SMALLINT NOT NULL,
@@ -100,7 +115,7 @@ def upgrade() -> None:
     """))
 
     op.execute(sa.text("""
-        CREATE TABLE tram_schedules (
+        CREATE TABLE IF NOT EXISTS tram_schedules (
             id          SERIAL PRIMARY KEY,
             tram_id     INT NOT NULL REFERENCES trams(id),
             zone_id     INT NOT NULL REFERENCES parking_zones(id),
@@ -109,7 +124,7 @@ def upgrade() -> None:
         )
     """))
 
-    op.execute(sa.text("CREATE INDEX idx_tram_sched_zone ON tram_schedules(zone_id, departure)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_tram_sched_zone ON tram_schedules(zone_id, departure)"))
 
 
 def downgrade() -> None:

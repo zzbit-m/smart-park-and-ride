@@ -23,6 +23,7 @@ from config import settings
 from services.jwt_helper import create_access_token, decode_access_token
 from services.audit import log_audit
 from services.analytics_service import get_export_summary
+from services import layout_sync
 from services.password_utils import verify_password
 from datetime import date
 
@@ -224,3 +225,87 @@ async def export_summary(
     target_date = date.fromisoformat(d) if d else date.today()
     summary = await get_export_summary(db, target_date, r)
     return summary
+
+
+# ── Layout models ──────────────────────────────────────────────────────────────
+
+
+class LayoutUploadRequest(BaseModel):
+    version: int
+    label: str
+    zones: list[dict]
+
+
+# ── Layout endpoints ───────────────────────────────────────────────────────────
+
+
+@router.post("/layout/upload")
+async def layout_upload(
+    body: LayoutUploadRequest,
+    _: dict = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload and apply a parking layout config.
+    Returns summary on success.
+    """
+    try:
+        result = await layout_sync.apply_layout(
+            db, body.model_dump(), uploaded_by=_["sub"]
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    if result.get("conflicts"):
+        raise HTTPException(status_code=409, detail=result)
+
+    return result
+
+
+@router.post("/layout/diff")
+async def layout_diff(
+    body: LayoutUploadRequest,
+    _: dict = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Preview what would change if this layout were applied.
+    Read-only — no database writes.
+    """
+    result = await layout_sync.preview_diff(db, body.model_dump())
+    return result
+
+
+@router.get("/layout/current")
+async def layout_current(
+    _: dict = Depends(verify_operator_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return the currently active layout, or null if none.
+    """
+    row = (await db.execute(
+        text("""
+            SELECT id, version, label, config, uploaded_by, uploaded_at, activated_at
+            FROM parking_layouts
+            WHERE is_active = TRUE
+            LIMIT 1
+        """),
+    )).fetchone()
+
+    if not row:
+        return {"layout": None}
+
+    return {
+        "layout": {
+            "id": row.id,
+            "version": row.version,
+            "label": row.label,
+            "config": row.config,
+            "uploaded_by": row.uploaded_by,
+            "uploaded_at": row.uploaded_at.isoformat() if row.uploaded_at else None,
+            "activated_at": row.activated_at.isoformat() if row.activated_at else None,
+        }
+    }

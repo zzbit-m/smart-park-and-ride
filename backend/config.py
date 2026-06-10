@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 # Load environment variables from .env if present
-load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 class Settings:
     DATABASE_URL: str = os.getenv(
@@ -18,7 +18,7 @@ class Settings:
     )
     ADMIN_PASSWORD: str = os.getenv(
         "ADMIN_PASSWORD",
-        "$2b$12$UJhGUpVI/h1hZFv1V1Z2POEM8eMb/ArTKkTgEV5KqVlSFmmQvU.u.",
+        "$2b$12$55geXor9/tXKqMWLn6Lks.HOot1CKnMYOPIZAbLUs0lddCQEfvkoq",
     )
     
     CORS_ALLOWED_ORIGINS: str = os.getenv(
@@ -40,6 +40,11 @@ class Settings:
     LIMIT_SCAN: int = int(os.getenv("LIMIT_SCAN", "60"))
     WINDOW_SCAN: int = int(os.getenv("WINDOW_SCAN", "60"))
     DEBUG_OTP: bool = os.getenv("DEBUG_OTP", "True").lower() in ("true", "1", "yes")
+    ENV: str = os.getenv("ENV", "development")
+
+    TWILIO_ACCOUNT_SID: str | None = os.getenv("TWILIO_ACCOUNT_SID")
+    TWILIO_AUTH_TOKEN: str | None = os.getenv("TWILIO_AUTH_TOKEN")
+    TWILIO_FROM_NUMBER: str | None = os.getenv("TWILIO_FROM_NUMBER")
 
     # Monitoring and backup settings
     SENTRY_DSN: str | None = os.getenv("SENTRY_DSN")

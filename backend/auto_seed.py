@@ -41,6 +41,14 @@ async def auto_seed() -> None:
                 logger.info("[seed] parking_slots has %d rows — skipping auto-seed.", count)
                 return
 
+            # ── Check for active layout ─────────────────────────────────────
+            layout_row = await db.execute(
+                text("SELECT id FROM parking_layouts WHERE is_active = TRUE LIMIT 1")
+            )
+            if layout_row.fetchone():
+                logger.info("[seed] Active layout found — skipping hardcoded auto-seed.")
+                return
+
             logger.info("[seed] parking_slots is empty — running auto-seed …")
 
             # ── 1. Ensure placeholder user exists ────────────────────────────────

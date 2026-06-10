@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 from fastapi import FastAPI, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 try:
@@ -33,7 +34,7 @@ from config import settings
 # For local development the defaults cover VS Code Live Server (5500)
 # and direct backend access.
 # In production, set CORS_ALLOWED_ORIGINS to your real frontend domain:
-#   CORS_ALLOWED_ORIGINS=https://your-app.example.com
+#         CORS_ALLOWED_ORIGINS=https://your-app.example.com
 _raw_origins = settings.CORS_ALLOWED_ORIGINS
 ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
@@ -109,6 +110,39 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+
+ADMIN_LAYOUT_DIR = os.getenv("ADMIN_LAYOUT_DIR", os.path.join(os.path.dirname(__file__), "..", "frontend", "admin-layout", "dist"))
+if os.path.isdir(ADMIN_LAYOUT_DIR):
+    app.mount("/admin-layout/assets", StaticFiles(directory=os.path.join(ADMIN_LAYOUT_DIR, "assets")), name="admin_layout_assets")
+    @app.get("/admin-layout/{full_path:path}")
+    async def serve_admin_layout(full_path: str):
+        file_path = os.path.join(ADMIN_LAYOUT_DIR, full_path) if full_path else os.path.join(ADMIN_LAYOUT_DIR, "index.html")
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(ADMIN_LAYOUT_DIR, "index.html"))
+    logger.info("admin-layout React SPA mounted at /admin-layout/")
+
+FRONTEND_DIR = os.getenv("FRONTEND_DIR", os.path.join(os.path.dirname(__file__), "..", "frontend"))
+if os.path.isdir(FRONTEND_DIR):
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.isfile(index_path):
+        @app.get("/", include_in_schema=False)
+        async def serve_index():
+            return FileResponse(index_path)
+
+    _frontend_files = {
+        "/admin.html":     ("admin.html", "text/html"),
+        "/admin.js":       ("admin.js", "application/javascript"),
+        "/app.js":         ("app.js", "application/javascript"),
+        "/config.js":      ("config.js", "application/javascript"),
+        "/style.css":      ("style.css", "text/css"),
+    }
+    for route, (rel_path, mime) in _frontend_files.items():
+        abs_path = os.path.join(FRONTEND_DIR, rel_path)
+        if os.path.isfile(abs_path):
+            app.get(route, include_in_schema=False)(lambda p=abs_path, m=mime: FileResponse(p, media_type=m))
+
+    logger.info("frontend static files mounted from %s", FRONTEND_DIR)
 
 app.include_router(admin.router, prefix="/api")
 app.include_router(slots.router, prefix="/api")

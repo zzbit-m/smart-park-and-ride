@@ -4,6 +4,19 @@ This project was updated with a small set of production-readiness improvements.
 
 ## What changed
 
+0. **Dynamic parking layout support**
+   - Added `slot_status` column (VARCHAR, named constraint) to `parking_slots`
+   - New Alembic migration: `f6a7b8c9d0e1_add_dynamic_layout_tables.py`
+   - Created `parking_layouts` table (versioned JSONB config storage)
+   - Created `parking_layout_slots` table (zone/slot grid with row/col coordinates)
+   - Partial unique index `one_active_layout` enforcing single active layout
+    - New service `backend/services/layout_sync.py` — `apply_layout()` validates config, detects slot conflicts, applies layout in a single transaction, syncs Redis, and audits changes
+    - `preview_diff()` — read-only preview, returns slots_to_create/remove/conflicts/unchanged
+    - `POST /api/admin/layout/upload` — apply layout (422 validation, 409 version/conflict)
+    - `POST /api/admin/layout/diff` — preview diff (read-only)
+    - `GET /api/admin/layout/current` — return active layout or null
+    - `auto_seed.py` — skips hardcoded seed if active layout exists (layout-driven deployments)
+
 1. **Analytics export summary endpoint**
    - Added `GET /api/admin/export/summary` in `backend/routers/admin.py`
    - Protected by `verify_admin_token` (admin-only)

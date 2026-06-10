@@ -168,6 +168,44 @@ header::after {
   text-transform: uppercase;
 }
 
+#zone-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 24px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.zone-tab {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.zone-tab:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.zone-tab--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0a0f1e;
+  font-weight: 600;
+}
+
+.lot-lane-sep {
+  width: 8px;
+  flex-shrink: 0;
+}
+
 /* ── SLOT GRID ── */
 .slot-grid {
   display: grid;

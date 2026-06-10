@@ -109,6 +109,9 @@
         <button id="tab-dashboard" class="admin-tab" role="tab" aria-selected="false" aria-controls="panel-dashboard">
           <span class="admin-tab-icon">📊</span> Dashboard
         </button>
+        <button id="tab-layout" class="admin-tab" role="tab" aria-selected="false" aria-controls="panel-layout">
+          <span class="admin-tab-icon">🅿</span> Layout
+        </button>
       </nav>
 
       <!-- ── PANEL: SCANNER ── -->
@@ -439,6 +442,72 @@
         </div>
 
       </div><!-- /panel-dashboard -->
+
+      <!-- ── PANEL: LAYOUT ── -->
+      <div id="panel-layout" class="admin-panel" role="tabpanel" aria-labelledby="tab-layout" hidden>
+
+        <!-- Current Layout Info -->
+        <div class="admin-card" id="layout-current-card">
+          <div class="dash-chart-header">
+            <div>
+              <p class="dash-chart-title">Current Layout</p>
+              <p class="dash-chart-sub" id="layout-current-sub">—</p>
+            </div>
+            <button id="layout-refresh-btn" class="btn-dash-refresh" title="Refresh">🔄</button>
+          </div>
+          <div id="layout-current-body">
+            <p style="color:#6b7a99;font-size:13px;padding:12px 0;">No layout applied yet.</p>
+          </div>
+        </div>
+
+        <!-- New Layout Form -->
+        <div class="admin-card">
+          <div class="dash-chart-header">
+            <div>
+              <p class="dash-chart-title">Upload New Layout</p>
+              <p class="dash-chart-sub">Define zones and slot layout below</p>
+            </div>
+          </div>
+
+          <div style="padding:8px 0;display:flex;gap:12px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:120px;">
+              <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">VERSION</label>
+              <input id="layout-version" type="number" min="1" step="1" class="scan-input" style="width:100%;" value="1" />
+            </div>
+            <div style="flex:3;min-width:200px;">
+              <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">LABEL</label>
+              <input id="layout-label" type="text" class="scan-input" style="width:100%;" placeholder="e.g. Main Lot v3" />
+            </div>
+          </div>
+
+          <div id="layout-zones-container">
+            <!-- zone rows inserted here -->
+          </div>
+
+          <button id="layout-add-zone-btn" class="btn-manual-release" style="margin-top:8px;">
+            <span class="btn-manual-icon">➕</span>
+            <span class="btn-manual-text">Add Zone</span>
+          </button>
+
+          <div id="layout-total-slots" style="color:#6b7a99;font-size:12px;padding:8px 0;text-align:right;">
+            Total: <span id="layout-total-count" style="color:#00e5a0;font-weight:600;">0</span> slots
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
+            <button id="layout-preview-btn" class="btn-scan btn-scan-in" style="flex:1;">
+              <span class="btn-scan-icon">🔍</span>
+              <span class="btn-scan-text">Preview Diff</span>
+            </button>
+            <button id="layout-apply-btn" class="btn-scan btn-scan-out" style="flex:1;">
+              <span class="btn-scan-icon">💾</span>
+              <span class="btn-scan-text">Apply Layout</span>
+            </button>
+          </div>
+
+          <div id="layout-result" class="scan-result" role="alert" aria-live="polite"></div>
+        </div>
+
+      </div><!-- /panel-layout -->
 
     </main>
 

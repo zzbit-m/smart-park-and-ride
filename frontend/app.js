@@ -2,7 +2,7 @@
 // API_BASE is set by frontend/config.js (loaded before this script).
 // Falls back to localhost for safety if config.js is missing.
 const API = (window.APP_CONFIG && window.APP_CONFIG.API_BASE) || 'http://localhost:8000';
-const SLOTS_URL = `${API}/api/slots`;
+const SLOTS_URL = `${API}/api/slots/`;
 const ACTIVE_BOOKING_KEY = 'activeBooking';
 
 
@@ -13,6 +13,7 @@ let state = {
   countdownTimer: null,
   modalCountdownTimer: null,
   parkedSlot: null,
+  activeZoneId: null,
 };
 
 // ── SCREEN NAVIGATION ──
@@ -634,8 +635,9 @@ function initPlateModal() {
       
       // Auto-populate OTP for easier dev/testing if available
       if (data.debug_otp) {
-        otpHint.textContent = `[Debug] OTP is: ${data.debug_otp}`;
-        otpHint.style.color = '#00e5a0';
+        otpHint.textContent = '';
+        otpInp.value = data.debug_otp;
+        verifyOtpBtn.disabled = false;
       }
       
       setTimeout(() => otpInp.focus(), 80);
@@ -766,31 +768,18 @@ async function fetchSlots() {
 }
 
 function slotSortKey(slotCode) {
-  const match = String(slotCode).match(/^([A-Za-z]+)(\d+)$/);
-  if (!match) return slotCode;
-  return `${match[1]}${String(match[2]).padStart(4, '0')}`;
+  const code = String(slotCode);
+  const match = code.match(/^([A-Za-z]+)(\d+)$/);
+  if (match) return `${match[1]}${String(match[2]).padStart(4, '0')}`;
+  const dashMatch = code.match(/^([A-Za-z]+)(\d+)-(\d+)$/);
+  if (dashMatch) return `${dashMatch[1]}${String(dashMatch[2]).padStart(2, '0')}${String(dashMatch[3]).padStart(2, '0')}`;
+  return code;
 }
 
 function sortSlots(slots) {
   return [...slots].sort((a, b) =>
     slotSortKey(a.slot_code).localeCompare(slotSortKey(b.slot_code))
   );
-}
-
-/** Left column A1–A10, right column B1–B10 (matches seeded API data). */
-function partitionSlotsForGrid(slots) {
-  const sorted = sortSlots(slots);
-  const columnA = sorted.filter(s => /^A/i.test(s.slot_code));
-  const columnB = sorted.filter(s => /^B/i.test(s.slot_code));
-
-  if (columnA.length && columnB.length) {
-    return { left: columnA, right: columnB };
-  }
-
-  return {
-    left: sorted.slice(0, 10),
-    right: sorted.slice(10, 20),
-  };
 }
 
 function normalizeStatus(liveStatus) {
@@ -821,13 +810,69 @@ function updateAvailableCount() {
   document.getElementById('available-count').textContent = `${n} ว่าง`;
 }
 
-// ── RENDER PARKING LOT (2 cols × 10 rows with center lane) ──
+// ── GROUP SLOTS BY ZONE ──
+function groupSlotsByZone(slots) {
+  const sorted = sortSlots(slots);
+  const groups = {};
+  sorted.forEach(s => {
+    const z = s.zone_id || 0;
+    if (!groups[z]) groups[z] = [];
+    groups[z].push(s);
+  });
+  const keys = Object.keys(groups).sort();
+  return keys.map(k => ({ zoneId: Number(k), slots: groups[k] }));
+}
+
+// ── RENDER ZONE TABS ──
+function renderZoneTabs(zones) {
+  const container = document.getElementById('zone-tabs');
+  container.replaceChildren();
+
+  if (zones.length <= 1) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  zones.forEach((zone, i) => {
+    const tab = document.createElement('button');
+    tab.className = 'zone-tab';
+    if (zone.zoneId === state.activeZoneId) tab.classList.add('zone-tab--active');
+    const prefix = zone.slots[0]?.slot_code?.match(/^[A-Za-z]+/)?.[0]?.toUpperCase() || `Zone ${zone.zoneId}`;
+    tab.textContent = `${prefix}`;
+    tab.addEventListener('click', () => {
+      state.activeZoneId = zone.zoneId;
+      renderParkingLot();
+    });
+    container.appendChild(tab);
+  });
+}
+
+// ── RENDER PARKING LOT ──
 function renderParkingLot() {
   const lot = document.getElementById('parking-lot');
   lot.replaceChildren();
 
-  const { left, right } = partitionSlotsForGrid(state.slots);
+  const groups = groupSlotsByZone(state.slots);
+  if (!groups.length) return;
 
+  let active = groups[0];
+  if (state.activeZoneId != null) {
+    const found = groups.find(g => g.zoneId === state.activeZoneId);
+    if (found) active = found;
+  }
+  state.activeZoneId = active.zoneId;
+
+  renderZoneTabs(groups);
+
+  // Split slots into two columns for visual balance
+  const all = sortSlots(active.slots);
+  const mid = Math.ceil(all.length / 2);
+  const leftCol = all.slice(0, mid);
+  const rightCol = all.slice(mid);
+  const rowCount = Math.max(leftCol.length, rightCol.length);
+
+  // Entry
   const entryTop = document.createElement('div');
   entryTop.className = 'lot-entry';
   entryTop.innerHTML = '<span class="entry-arrow">▼ ทางเข้า</span>';
@@ -836,26 +881,25 @@ function renderParkingLot() {
   const grid = document.createElement('div');
   grid.className = 'lot-grid';
 
-  const rowCount = Math.max(left.length, right.length, 10);
-
   for (let row = 0; row < rowCount; row++) {
     const rowEl = document.createElement('div');
     rowEl.className = 'lot-row';
 
-    if (left[row]) rowEl.appendChild(makeSlotEl(left[row]));
+    if (leftCol[row]) rowEl.appendChild(makeSlotEl(leftCol[row]));
 
     const lane = document.createElement('div');
     lane.className = 'lot-lane';
-    lane.innerHTML = row === 4 ? '<span class="lane-arrow">↕</span>' : '';
+    lane.innerHTML = row === Math.floor(rowCount / 2) ? '<span class="lane-arrow">↕</span>' : '';
     rowEl.appendChild(lane);
 
-    if (right[row]) rowEl.appendChild(makeSlotEl(right[row]));
+    if (rightCol[row]) rowEl.appendChild(makeSlotEl(rightCol[row]));
 
     grid.appendChild(rowEl);
   }
 
   lot.appendChild(grid);
 
+  // Exit
   const entryBottom = document.createElement('div');
   entryBottom.className = 'lot-entry';
   entryBottom.innerHTML = '<span class="entry-arrow">▲ ทางออก</span>';

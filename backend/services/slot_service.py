@@ -212,6 +212,7 @@ async def list_slots(db: AsyncSession) -> list[dict]:
     result = await db.execute(
         text(
             "SELECT id, slot_code, zone_id, last_known_status FROM parking_slots "
+            "WHERE slot_status = 'active' OR slot_status IS NULL "
             "ORDER BY zone_id, slot_code"
         )
     )

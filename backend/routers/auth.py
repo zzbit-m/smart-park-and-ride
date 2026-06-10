@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db, get_redis
 from services.jwt_helper import create_access_token
+from services.sms import send_otp
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,8 @@ async def request_otp(body: OTPRequest):
     
     logger.info(f"[OTP] Generated secure OTP for phone {phone}")
     
+    await send_otp(phone, otp)
+
     return OTPResponse(
         message="OTP sent successfully",
         debug_otp=otp if settings.DEBUG_OTP else None
