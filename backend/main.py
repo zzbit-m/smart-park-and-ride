@@ -26,7 +26,7 @@ except ImportError:  # pragma: no cover
 
 from database import check_postgres, check_redis, close_connections, init_connections
 from auto_seed import auto_seed
-from routers import admin, slots, auth, users, feedback
+from routers import admin, slots, auth, users, feedback, push
 from config import settings
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
@@ -37,6 +37,9 @@ from config import settings
 #         CORS_ALLOWED_ORIGINS=https://your-app.example.com
 _raw_origins = settings.CORS_ALLOWED_ORIGINS
 ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
+for origin in ALLOWED_ORIGINS:
+    logger.info("CORS allowed origin: %s", origin)
 
 if settings.SENTRY_DSN and sentry_sdk is not None:
     sentry_sdk.init(
@@ -149,6 +152,7 @@ app.include_router(slots.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(feedback.router, prefix="/api")
+app.include_router(push.router, prefix="/api")
 # app.include_router(trams.router, prefix="/api")
 
 

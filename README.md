@@ -23,11 +23,12 @@ python -m http.server 5500
 - **Operator Dashboard:** `http://localhost:5500/admin.html`
 - **Feedback Form:** `http://localhost:5500/feedback.html`
 - **Feedback Admin:** `http://localhost:5500/feedback-admin.html`
+- **Layout Manager (React SPA):** See `frontend/admin-layout/README.md`
 
 ### 3. Default Credentials
 | Role | Username | Password |
 |------|----------|----------|
-| Admin | `admin` | `password123` |
+| Admin | `admin` | `admin123` |
 | Operator | `operator` | `operator123` |
 
 ---
@@ -42,6 +43,7 @@ python -m http.server 5500
 - [ ] **Thai plate** — Regex `[ก-ฮ]` strips vowels/tones
 - [ ] **Offline** — No PWA; network drop breaks gate
 - [ ] **Payment** — No billing integration
+- [ ] **UI unification** — Admin split between vanilla dashboard and React layout tool
 
 See [STATE.md](STATE.md) for full gap analysis.
 
@@ -55,3 +57,4 @@ See [STATE.md](STATE.md) for full gap analysis.
 | [FEATURES.md](FEATURES.md) | Feature list by phase with known limits |
 | [SETUP.md](SETUP.md) | Prerequisites, config, verification steps |
 | [STATE.md](STATE.md) | Current state, gaps, and recommended work |
+| [frontend/admin-layout/README.md](frontend/admin-layout/README.md) | Admin Layout Manager (React SPA) |

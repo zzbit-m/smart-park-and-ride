@@ -143,3 +143,37 @@ Run nightly backup at 03:00 UTC:
 ```cron
 0 3 * * * /usr/bin/env python /path/to/backend/backup.py --upload-s3
 ```
+
+---
+
+## Round 2: Twilio SMS, admin-layout React SPA & baseline migration fix
+
+### Twilio SMS integration
+- Created `backend/services/sms.py` — sends OTP via Twilio REST API
+- Config: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `DEBUG_OTP`
+- `send_sms()` function returns `{"success": true, "provider": "twilio"|"debug"}`
+- Integrated into `backend/routers/auth.py` — replaces hardcoded `console.log` OTP with real SMS
+- Debug mode (`DEBUG_OTP=true`, default) logs OTP to console instead of sending
+- Env vars added to `docker-compose.yml` and `.env.example`
+
+### React admin-layout SPA
+- Scaffolded Vite 5 + React 18 project at `frontend/admin-layout/`
+- Components: `ZoneRow` (zone form), `SlotGrid` (grid editor), `GridPreview` (visual grid)
+- Login flow: static `import` (fixed from dynamic `import()`)
+- Grid preview logic matches backend `_generate_slot_code` (1×≤10 → no row prefix)
+- Zone row field proportions balanced (name flex:2, rows/cols 60px, prefix 64px, type flex:1.2)
+- Slot type values lowercased on submit to match backend CHECK constraint
+- `admin.js` Layout tab → hard redirect to `/admin-layout/`
+- FastAPI static serving via `ADMIN_LAYOUT_DIR` env var + Docker volume mount
+- `window.APP_CONFIG` injected in both dev (`index.html`) and production build (via backend static route)
+
+### Baseline migration fix
+- Fixed `backend/migrations/versions/f7b8c9d0e1f2_normalize_slot_type_check.py`:
+  - Added `IF NOT EXISTS` guards for idempotent replay
+  - Wrapped type/index creation in `DO $$ ... $$` anonymous blocks
+- Auto-seed skips if an active layout already exists
+
+### Prod environment updates
+- Default admin password: `admin123` (was `password123`)
+- `.env.example` updated with new vars: `TWILIO_*`, `DEBUG_OTP`, `ADMIN_LAYOUT_DIR`, `ADMIN_PASSWORD`
+- `SETUP.md`, `FEATURES.md`, `ARCHITECTURE.md`, `STATE.md` synced to current state

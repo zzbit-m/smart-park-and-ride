@@ -69,7 +69,7 @@ async def _resolve_zone_id(db: AsyncSession, zone_name: str, total_slots: int) -
         {"name": zone_name},
     )).fetchone()
     if row:
-        return row.id
+        return row[0]
 
     row = (await db.execute(
         text("""
@@ -79,7 +79,9 @@ async def _resolve_zone_id(db: AsyncSession, zone_name: str, total_slots: int) -
         """),
         {"name": zone_name, "total_slots": total_slots},
     )).fetchone()
-    return row.id
+    if row:
+        return row[0]
+    raise RuntimeError("Failed to resolve or create zone ID")
 
 
 async def apply_layout(
@@ -169,7 +171,9 @@ async def apply_layout(
                 "uploaded_by": uploaded_by,
             },
         )).fetchone()
-        layout_id = row.id
+        if not row:
+            raise RuntimeError("Failed to insert layout")
+        layout_id = row[0]
 
         # ── Process slots ──────────────────────────────────────────────────
         slots_created = 0
@@ -206,7 +210,9 @@ async def apply_layout(
                     """),
                     {"zone_id": zone_id, "code": slot["slot_code"]},
                 )).fetchone()
-                newly_created_ids.append(result.id)
+                if not result:
+                    raise RuntimeError("Failed to insert slot")
+                newly_created_ids.append(result[0])
                 slots_created += 1
 
         # ── Bulk upsert parking_layout_slots ────────────────────────────────
@@ -248,7 +254,7 @@ async def apply_layout(
                 """),
                 {"codes": list(removed_codes)},
             )
-            raw = result.rowcount
+            raw = getattr(result, "rowcount", 0)
             slots_removed = raw if raw is not None and raw >= 0 else 0
 
         # ── Activate new layout ─────────────────────────────────────────────

@@ -18,7 +18,6 @@ from redis_client import (
     get_redis,
     get_slot_id_by_qr_token,
     get_slot_key,
-    hold_slot,
     release_slot,
     set_qr_token_lookup,
     occupy_slot,
@@ -46,7 +45,7 @@ async def _get_or_create_zone(
     )
     row = result.fetchone()
     if row:
-        return row.id, False
+        return row[0], False
 
     result = await db.execute(
         text("""
@@ -56,7 +55,10 @@ async def _get_or_create_zone(
         """),
         {"name": name, "tram_stop": tram_stop, "total_slots": total_slots},
     )
-    return result.fetchone().id, True
+    row = result.fetchone()
+    if not row:
+        raise RuntimeError("Failed to insert zone and retrieve ID")
+    return row[0], True
 
 
 def _merge_live_status(redis_status: str, pg_status: str) -> str:
@@ -210,11 +212,15 @@ async def seed_slots(db: AsyncSession, actor: str) -> dict:
 async def list_slots(db: AsyncSession) -> list[dict]:
     """List all parking slots with live status merged from PostgreSQL and Redis."""
     result = await db.execute(
-        text(
-            "SELECT id, slot_code, zone_id, last_known_status FROM parking_slots "
-            "WHERE slot_status = 'active' OR slot_status IS NULL "
-            "ORDER BY zone_id, slot_code"
-        )
+        text("""
+            SELECT ps.id, ps.slot_code, ps.zone_id, ps.last_known_status,
+                   pls.row_number, pls.col_number, pls.slot_type
+            FROM parking_slots ps
+            LEFT JOIN parking_layout_slots pls ON pls.slot_code = ps.slot_code
+            LEFT JOIN parking_layouts pl ON pl.id = pls.layout_id AND pl.is_active = TRUE
+            WHERE ps.slot_status = 'active' OR ps.slot_status IS NULL
+            ORDER BY ps.zone_id, ps.slot_code
+        """)
     )
     rows = result.fetchall()
 
@@ -226,6 +232,9 @@ async def list_slots(db: AsyncSession) -> list[dict]:
             "id": row.id,
             "slot_code": row.slot_code,
             "zone_id": row.zone_id,
+            "row_number": row.row_number,
+            "col_number": row.col_number,
+            "slot_type": row.slot_type or "standard",
             "live_status": _merge_live_status(
                 statuses.get(row.id, "available"),
                 row.last_known_status,

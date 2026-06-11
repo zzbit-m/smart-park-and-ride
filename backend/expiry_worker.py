@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
 from database import AsyncSessionLocal, get_redis
 from redis_client import get_slot_key, release_slot, delete_qr_token_lookup
+from services.push_service import send_push_to_user
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,30 @@ async def check_and_expire_bookings():
             return
 
         now = datetime.now(timezone.utc)
-        
+
+        # ── 5-MINUTE WARNING: notify users whose slot expires within 5 min ──
+        redis = get_redis()
+        warning_cutoff = now + timedelta(minutes=5)
+        warn_result = await db.execute(
+            text("""
+                SELECT id, user_id FROM bookings
+                WHERE status = 'held'
+                  AND expires_at BETWEEN NOW() AND :cutoff
+            """),
+            {"cutoff": warning_cutoff},
+        )
+        for row in warn_result.fetchall():
+            warn_key = f"warn_sent:{row.id}"
+            already_sent = await redis.get(warn_key)
+            if not already_sent:
+                await send_push_to_user(
+                    db, str(row.user_id),
+                    "⏰ Slot expiring soon",
+                    "Your parking slot reservation expires in 5 minutes.",
+                    {"type": "expiry_warning", "booking_id": str(row.id)},
+                )
+                await redis.set(warn_key, "1", ex=600)
+
         for booking in held_bookings:
             booking_id = str(booking.id)
             slot_id = booking.slot_id
@@ -96,7 +120,14 @@ async def check_and_expire_bookings():
                 # Delete the QR token lookup
                 await delete_qr_token_lookup(qr_token)
                 logger.info(f"Deleted QR token lookup for booking {booking_id}.")
-                
+
+                await send_push_to_user(
+                    db, str(booking.user_id),
+                    "❌ Slot reservation expired",
+                    "Your parking slot reservation has expired and been released.",
+                    {"type": "expired", "booking_id": booking_id},
+                )
+
         await db.commit()
 
 async def run_expiry_worker():

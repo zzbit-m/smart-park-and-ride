@@ -37,7 +37,7 @@ async def check_rate_limit(identifier: str, endpoint: str, limit: int, window_se
     
     try:
         # Execute atomic Lua script
-        result = await redis.eval(LUA_RATE_LIMIT, 1, key, str(window_seconds))
+        result = await redis.eval(LUA_RATE_LIMIT, 1, key, str(window_seconds))  # type: ignore
         count = int(result)
             
         if count > limit:

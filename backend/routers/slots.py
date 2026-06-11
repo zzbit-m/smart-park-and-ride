@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +18,9 @@ class SlotOut(BaseModel):
     slot_code: str
     zone_id: int
     live_status: str
+    row_number: int | None = None
+    col_number: int | None = None
+    slot_type: str | None = None
 
 
 class HoldRequest(BaseModel):
@@ -192,6 +196,8 @@ async def hold_slot_endpoint(
     be linked to a specific vehicle for access-control purposes.
     """
     user_id = auth_payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
     return await slot_service.hold_slot(
         db,
         slot_id,
@@ -216,4 +222,43 @@ async def release_hold(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
     return await slot_service.release_hold(db, slot_id, qr_token, user_id=user_id, actor="driver")
+
+
+async def slot_updates_generator():
+    from database import get_redis
+    import asyncio
+    redis = get_redis()
+    pubsub = redis.pubsub()
+    await pubsub.subscribe("slot_updates")
+    last_heartbeat = asyncio.get_event_loop().time()
+    try:
+        while True:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message and message.get("type") == "message":
+                data = message["data"]
+                yield f"data: {data}\n\n"
+            
+            now = asyncio.get_event_loop().time()
+            if now - last_heartbeat >= 15.0:
+                yield ": keepalive\n\n"
+                last_heartbeat = now
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await pubsub.unsubscribe("slot_updates")
+        await pubsub.close()
+
+
+@router.get("/live")
+async def live_slots():
+    """Stream live slot status updates to clients using SSE."""
+    return StreamingResponse(
+        slot_updates_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 

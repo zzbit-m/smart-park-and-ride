@@ -12,7 +12,11 @@ This document details the architectural layout, core design patterns, and system
 
 ### 2. Layer Separation
 * **Routers (Presentation):** FastAPI routers are thin, descriptive, and declarative. Their duties are limited to validating request bodies, handling HTTP exception wrapping, and mapping response schemas.
-* **Services (Business Logic):** `backend/services/slot_service.py` for slot booking (state machine). `backend/services/analytics_service.py` for aggregation formatting and date-range computation.
+* **Services (Business Logic):**
+  - `slot_service.py` — slot booking state machine
+  - `analytics_service.py` — aggregation formatting and date-range computation
+  - `layout_sync.py` — layout apply/preview, slot conflict detection, Redis sync, audit trail
+  - `sms.py` — Twilio SMS for OTP delivery (debug fallback via `DEBUG_OTP`)
 * **Repositories (Data Access):** `backend/repositories/analytics_repo.py` contains raw SQL aggregate queries. Keeps SQL out of the service layer, enabling unit testing of logic without DB connections.
 * **Database (Persistence):** SQL scripts and ORM commands managing standard transaction scopes.
 
@@ -54,10 +58,22 @@ stateDiagram-v2
 
 ## Frontend Delivery
 
+### Vanilla JS SPA (Rider Portal + Operator Dashboard)
 - **Static Vanilla JS:** No build step. `window.APP_CONFIG` from `frontend/config.js`.
 - **Session:** JWT stored in `localStorage` — single-device only.
 - **Real-time:** 30-second polling for slot status (no WebSocket/SSE).
 - **QR:** Client-side generation via `qrious.min.js`; camera scan via native Web API.
+
+### React SPA (Admin Layout Manager)
+- **Build step:** Vite 5 + React 18, output to `dist/`.
+- **Served at:** `/admin-layout/` via FastAPI static mount (dev) or nginx (prod).
+- **Config:** `window.APP_CONFIG` injected via backend-served `config.js` at runtime.
+- **Auth:** Shares JWT (`localStorage.adminToken`) with vanilla admin dashboard.
+- **Scope:** Layout CRUD only — no booking, scanning, or user management.
+- **Architecture:** See `frontend/admin-layout/README.md` for hard boundary rules.
+
+### Routing
+- `admin.html` Layout tab → `GET /admin-layout/` redirect → React SPA.
 
 ---
 
@@ -71,4 +87,4 @@ stateDiagram-v2
 | **DB backup** | None | `pg_dump` cron |
 | **Offline** | None | PWA + service worker |
 | **Testing** | 4 backend test files | Add integration + frontend tests |
-| **UI** | Vanilla JS | Consider Svelte/React for maintainability |
+| **UI** | Vanilla JS + React SPA (layout tool) | Unify into single framework |

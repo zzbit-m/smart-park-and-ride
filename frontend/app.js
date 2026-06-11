@@ -865,45 +865,116 @@ function renderParkingLot() {
 
   renderZoneTabs(groups);
 
-  // Split slots into two columns for visual balance
-  const all = sortSlots(active.slots);
-  const mid = Math.ceil(all.length / 2);
-  const leftCol = all.slice(0, mid);
-  const rightCol = all.slice(mid);
-  const rowCount = Math.max(leftCol.length, rightCol.length);
+  // Check if active slots have row_number and col_number
+  const hasCoordinates = active.slots.every(s => s.row_number != null && s.col_number != null);
 
-  // Entry
-  const entryTop = document.createElement('div');
-  entryTop.className = 'lot-entry';
-  entryTop.innerHTML = '<span class="entry-arrow">▼ ทางเข้า</span>';
-  lot.appendChild(entryTop);
+  if (hasCoordinates) {
+    // Render as a dynamic grid using CSS Grid Layout
+    const maxRow = Math.max(...active.slots.map(s => s.row_number));
+    const maxCol = Math.max(...active.slots.map(s => s.col_number));
 
-  const grid = document.createElement('div');
-  grid.className = 'lot-grid';
+    let renderRow = maxRow;
+    let renderCol = maxCol;
+    let transpose = false;
 
-  for (let row = 0; row < rowCount; row++) {
-    const rowEl = document.createElement('div');
-    rowEl.className = 'lot-row';
+    // Transpose horizontal layout to vertical for better mobile fit
+    if (maxRow < maxCol) {
+      renderRow = maxCol;
+      renderCol = maxRow;
+      transpose = true;
+    }
 
-    if (leftCol[row]) rowEl.appendChild(makeSlotEl(leftCol[row]));
+    // Entry
+    const entryTop = document.createElement('div');
+    entryTop.className = 'lot-entry';
+    entryTop.innerHTML = '<span class="entry-arrow">▼ ทางเข้า</span>';
+    lot.appendChild(entryTop);
 
-    const lane = document.createElement('div');
-    lane.className = 'lot-lane';
-    lane.innerHTML = row === Math.floor(rowCount / 2) ? '<span class="lane-arrow">↕</span>' : '';
-    rowEl.appendChild(lane);
+    const grid = document.createElement('div');
+    grid.className = 'lot-grid dynamic-grid';
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = `repeat(${renderCol}, 1fr)`;
+    grid.style.gridTemplateRows = `repeat(${renderRow}, auto)`;
+    grid.style.gap = '12px';
+    grid.style.padding = '16px';
+    grid.style.maxWidth = renderCol === 1 ? '180px' : renderCol === 2 ? '320px' : '600px';
+    grid.style.margin = '0 auto';
 
-    if (rightCol[row]) rowEl.appendChild(makeSlotEl(rightCol[row]));
+    // Create a matrix of slot elements
+    const slotMatrix = {};
+    active.slots.forEach(slot => {
+      slotMatrix[`${slot.row_number}-${slot.col_number}`] = slot;
+    });
 
-    grid.appendChild(rowEl);
+    for (let r = 1; r <= renderRow; r++) {
+      for (let c = 1; c <= renderCol; c++) {
+        const matrixKey = transpose ? `${c}-${r}` : `${r}-${c}`;
+        const slot = slotMatrix[matrixKey];
+
+        if (slot) {
+          const slotEl = makeSlotEl(slot);
+          slotEl.style.gridRow = r;
+          slotEl.style.gridColumn = c;
+          grid.appendChild(slotEl);
+        } else {
+          // Empty cell placeholder
+          const empty = document.createElement('div');
+          empty.className = 'lot-slot-empty';
+          empty.style.gridRow = r;
+          empty.style.gridColumn = c;
+          grid.appendChild(empty);
+        }
+      }
+    }
+
+    lot.appendChild(grid);
+
+    // Exit
+    const entryBottom = document.createElement('div');
+    entryBottom.className = 'lot-entry';
+    entryBottom.innerHTML = '<span class="entry-arrow">▲ ทางออก</span>';
+    lot.appendChild(entryBottom);
+  } else {
+    // Fallback to the traditional two-column split layout
+    const all = sortSlots(active.slots);
+    const mid = Math.ceil(all.length / 2);
+    const leftCol = all.slice(0, mid);
+    const rightCol = all.slice(mid);
+    const rowCount = Math.max(leftCol.length, rightCol.length);
+
+    // Entry
+    const entryTop = document.createElement('div');
+    entryTop.className = 'lot-entry';
+    entryTop.innerHTML = '<span class="entry-arrow">▼ ทางเข้า</span>';
+    lot.appendChild(entryTop);
+
+    const grid = document.createElement('div');
+    grid.className = 'lot-grid';
+
+    for (let row = 0; row < rowCount; row++) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'lot-row';
+
+      if (leftCol[row]) rowEl.appendChild(makeSlotEl(leftCol[row]));
+
+      const lane = document.createElement('div');
+      lane.className = 'lot-lane';
+      lane.innerHTML = row === Math.floor(rowCount / 2) ? '<span class="lane-arrow">↕</span>' : '';
+      rowEl.appendChild(lane);
+
+      if (rightCol[row]) rowEl.appendChild(makeSlotEl(rightCol[row]));
+
+      grid.appendChild(rowEl);
+    }
+
+    lot.appendChild(grid);
+
+    // Exit
+    const entryBottom = document.createElement('div');
+    entryBottom.className = 'lot-entry';
+    entryBottom.innerHTML = '<span class="entry-arrow">▲ ทางออก</span>';
+    lot.appendChild(entryBottom);
   }
-
-  lot.appendChild(grid);
-
-  // Exit
-  const entryBottom = document.createElement('div');
-  entryBottom.className = 'lot-entry';
-  entryBottom.innerHTML = '<span class="entry-arrow">▲ ทางออก</span>';
-  lot.appendChild(entryBottom);
 }
 
 function makeSlotEl(slot) {
@@ -925,9 +996,22 @@ function makeSlotEl(slot) {
     el.title = 'แตะเพื่อดูตั๋วจอง / ยกเลิก';
   }
 
+  let icon = '🅿';
+  if (status === 'held') {
+    icon = '⏳';
+  } else if (status === 'occupied') {
+    icon = '🚗';
+  } else if (slot.slot_type === 'ev') {
+    icon = '⚡';
+    el.classList.add('lot-slot--ev');
+  } else if (slot.slot_type === 'disabled') {
+    icon = '♿';
+    el.classList.add('lot-slot--disabled');
+  }
+
   el.innerHTML = `
     <div class="lot-slot-inner">
-      <span class="lot-slot-icon">${status === 'available' ? '🅿' : status === 'held' ? '⏳' : '🚗'}</span>
+      <span class="lot-slot-icon">${icon}</span>
       <span class="lot-slot-code">${slot.slot_code}</span>
     </div>
   `;
@@ -1182,9 +1266,45 @@ async function renderTramSchedule() {
 }
 
 
+// ── LIVE UPDATES (SSE) ──
+function initLiveUpdates() {
+  const sseUrl = `${SLOTS_URL}live`;
+  console.log(`[SSE] Connecting to live updates at: ${sseUrl}`);
+  const eventSource = new EventSource(sseUrl);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      console.log('[SSE] Received slot update:', data);
+
+      let updated = false;
+      state.slots = state.slots.map(slot => {
+        if (Number(slot.id) === Number(data.slot_id)) {
+          updated = true;
+          return { ...slot, live_status: data.live_status };
+        }
+        return slot;
+      });
+
+      if (updated) {
+        renderParkingLot();
+        updateAvailableCount();
+      }
+    } catch (err) {
+      console.error('[SSE] Failed to parse message:', err);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    console.warn('[SSE] Connection error. EventSource will auto-reconnect.', err);
+  };
+}
+
+
 // ── INIT ──
 initPlateModal();
 initTicketModal();
 initParkingLotClicks();
 loadSlots();
-setInterval(loadSlots, 30000);
+initLiveUpdates();
+setInterval(loadSlots, 120000);

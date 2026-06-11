@@ -159,3 +159,61 @@ async def test_hold_slot_banned_user_fails():
         
     assert exc_info.value.status_code == 403
     assert "temporarily banned" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_list_slots_coordinates():
+    mock_db = AsyncMock()
+    mock_row = MagicMock()
+    mock_row.id = 1
+    mock_row.slot_code = "A01"
+    mock_row.zone_id = 1
+    mock_row.last_known_status = "available"
+    mock_row.row_number = 1
+    mock_row.col_number = 2
+    mock_row.slot_type = "ev"
+    
+    mock_result = MagicMock()
+    mock_result.fetchall.return_value = [mock_row]
+    mock_db.execute.return_value = mock_result
+    
+    with patch("services.slot_service.get_all_slot_statuses") as mock_redis_statuses:
+        mock_redis_statuses.return_value = {1: "available"}
+        
+        slots = await slot_service.list_slots(mock_db)
+        
+        assert len(slots) == 1
+        assert slots[0]["id"] == 1
+        assert slots[0]["row_number"] == 1
+        assert slots[0]["col_number"] == 2
+        assert slots[0]["slot_type"] == "ev"
+
+
+@pytest.mark.asyncio
+@patch("database.get_redis")
+async def test_live_slots_sse_generator(mock_get_redis):
+    mock_redis = MagicMock()
+    mock_pubsub = AsyncMock()
+    mock_redis.pubsub = MagicMock(return_value=mock_pubsub)
+    mock_get_redis.return_value = mock_redis
+    
+    messages = [
+        {"type": "message", "data": '{"slot_id": 1, "live_status": "held"}'},
+        None
+    ]
+    mock_pubsub.get_message.side_effect = messages
+    
+    from routers.slots import slot_updates_generator
+    
+    gen = slot_updates_generator()
+    
+    with patch("asyncio.get_event_loop") as mock_loop:
+        mock_loop_instance = MagicMock()
+        mock_loop_instance.time.return_value = 0.0
+        mock_loop.return_value = mock_loop_instance
+        
+        try:
+            val = await anext(gen)
+            assert val == 'data: {"slot_id": 1, "live_status": "held"}\n\n'
+        finally:
+            await gen.aclose()

@@ -43,6 +43,7 @@ Open the interfaces in your browser:
 * **Operator console:** `http://localhost:5500/admin.html`
 * **Feedback form:** `http://localhost:5500/feedback.html`
 * **Feedback admin:** `http://localhost:5500/feedback-admin.html`
+* **Layout manager (React):** See [admin-layout setup](#-5-admin-layout-manager-react-spa-optional)
 
 ---
 
@@ -56,10 +57,15 @@ Create a `.env` file in the root directory if customizing environment settings. 
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@db:5432/park_db` |
 | `REDIS_URL` | Redis connection string | `redis://redis:6379/0` |
 | `ADMIN_USERNAME` | Administrator login | `admin` |
-| `ADMIN_PASSWORD` | Administrator password | `password123` |
+| `ADMIN_PASSWORD` | Administrator password | `admin123` |
 | `OPERATOR_USERNAME` | Operator login | `operator` |
 | `OPERATOR_PASSWORD` | Operator password | `operator123` |
 | `CORS_ALLOWED_ORIGINS`| Allowed host domains | `http://localhost:5500,http://127.0.0.1:5500` |
+| `DEBUG_OTP` | Log OTP to console instead of sending SMS | `true` |
+| `TWILIO_ACCOUNT_SID` | Twilio account SID for production SMS | *(empty)* |
+| `TWILIO_AUTH_TOKEN` | Twilio auth token | *(empty)* |
+| `TWILIO_PHONE_NUMBER` | Twilio sending phone number | *(empty)* |
+| `ADMIN_LAYOUT_DIR` | Path to admin-layout build output | `./frontend/admin-layout/dist` |
 
 ### Frontend Setup (`frontend/config.js`)
 Ensure the frontend matches your active API port by configuring the base path in `frontend/config.js`:
@@ -87,16 +93,52 @@ After starting the services, apply any pending Alembic migrations:
 docker-compose exec backend alembic upgrade head
 ```
 
+Current migration chain:
+| File | Purpose |
+|------|---------|
+| `f6a7b8c9d0e1_add_dynamic_layout_tables.py` | Layout tables + constraints |
+| `d4e5f6a7b8c9_add_vehicle_type.py` | Vehicle type columns |
+| `f7b8c9d0e1f2_normalize_slot_type_check.py` | Lowercase `slot_type` CHECK constraint |
+
 ### Seed Initial Data
 Populate the database with sample slot information.
 1. Authenticate to retrieve an Admin token:
    ```bash
    curl -X POST http://localhost:8000/api/admin/login \
      -H "Content-Type: application/json" \
-     -d '{"username":"admin","password":"password123"}'
+     -d '{"username":"admin","password":"admin123"}'
    ```
 2. Trigger the seeding execution using the returned token:
    ```bash
    curl -X POST http://localhost:8000/api/slots/seed \
      -H "Authorization: Bearer <ADMIN_TOKEN>"
    ```
+
+---
+
+## 🧰 5. Admin Layout Manager (React SPA — Optional)
+
+The admin-layout tool is a standalone React app for staff-only layout management.
+
+### First-time setup
+```bash
+cd frontend/admin-layout
+npm install
+```
+
+### Development
+```bash
+npm run dev          # Dev server on http://localhost:5173
+```
+It reads `window.APP_CONFIG` from `http://localhost:8000/admin-layout/config.js`.
+
+### Production build
+```bash
+npm run build        # Output → frontend/admin-layout/dist/
+```
+
+### Deployment options
+1. **Single-server:** Volume-mount `dist/` into the backend container (set `ADMIN_LAYOUT_DIR`).
+2. **Reverse proxy:** nginx location block `/admin-layout/` → build directory.
+
+The React SPA is accessible at `http://localhost:8000/admin-layout/` (served by FastAPI static mount).

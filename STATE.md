@@ -56,6 +56,8 @@ Single source of truth tracking implementation progress, health, and remaining w
 #### Phase 6: Passenger Identity & Vehicle Registry
 - [x] Database migration and `user_vehicles` table
 - [x] Passwordless OTP request and validation endpoints
+- [x] Twilio SMS integration (`services/sms.py`) with debug fallback (`DEBUG_OTP`)
+- [x] `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` env vars
 - [x] Front-end OTP verification dialog
 - [x] Browser token + vehicle caching for one-click bookings
 - [x] Saved vehicle list with delete controls
@@ -67,6 +69,22 @@ Single source of truth tracking implementation progress, health, and remaining w
 - [x] test harness with pytest, pytest-asyncio, httpx
 - [x] Unit tests for JWT helpers and state-machine transitions
 - [x] Async SQL tests for auth and registry flows
+
+#### Phase 9: Layout Management & Admin Tooling
+- [x] Dynamic layout tables + migration (`f6a7b8c9d0e1`)
+- [x] `services/layout_sync.py` — `apply_layout()` with validation, conflict detection, Redis sync, auditing
+- [x] `preview_diff()` — read-only layout diff
+- [x] `POST /api/admin/layout/upload` — layout apply endpoint
+- [x] `POST /api/admin/layout/diff` — layout preview endpoint
+- [x] `GET /api/admin/layout/current` — active layout query
+- [x] React SPA (`frontend/admin-layout/`) — Vite + React 18 grid editor
+- [x] Tab redirect: `admin.js` → `/admin-layout/` for Layout tab
+- [x] Grid preview matches backend `_generate_slot_code` logic
+- [x] Slot type normalization (lowercase) + migration `f7b8c9d0e1f2`
+- [x] `window.APP_CONFIG` served via backend static route for admin-layout
+- [x] Zone row field proportions balanced in UI
+- [x] Extended backend slots schema to include layout coordinates and slot type
+- [x] Render parking slots grid dynamically matching coordinates from configuration
 
 #### Phase 8: System Stabilization & Hardening (Incremental Fixes)
 - [x] Fixed out-of-the-box DB connection password fallbacks preventing InvalidPasswordError
@@ -83,13 +101,14 @@ Single source of truth tracking implementation progress, health, and remaining w
 - [x] Removed public ngrok tunnel from CORS Allowed Origins to restrict traffic to local environment hosts
 - [x] Ignored untracked client configurations and python build cache artifacts in Git
 - [x] Verified clean startup and health checks for database, redis, backend, and background worker containers
+- [x] Implemented real-time updates via Server-Sent Events (SSE) using Redis Pub/Sub
 
 ---
 
 ### ⚠️ Known Gaps & Limitations
 
 #### Core Booking
-- [ ] **No real-time updates** — Frontend polls every 30s; use SSE or WebSocket for live slot status
+- [x] **Real-time updates** — Frontend uses SSE for live slot status (was 30s polling)
 - [ ] **Single-device session** — Booking stored in `localStorage`; user cannot switch devices mid-booking
 - [ ] **No waitlist** — If all slots held, user gets no queue position
 
@@ -103,14 +122,14 @@ Single source of truth tracking implementation progress, health, and remaining w
 - [ ] **No integration tests** — No end-to-end flow tests (hold → scan-in → scan-out)
 
 #### Frontend UX
-- [ ] **Vanilla JS maintenance burden** — No framework; scales poorly with complexity
+- [ ] **Vanilla JS + React split** — Admin tools split between vanilla dashboard and React layout SPA
 - [ ] **Thai plate regex strips vowels/tones** — `[ก-ฮ]` range excludes vowels and tone marks
 - [ ] **Confirm dialog blocks UI** — Uses `confirm()` for delete; no custom modal
 
 #### Business Features
 - [ ] **No payment integration** — No billing or receipt system
 - [ ] **No multi-zone/floor support** — Single lot only
-- [ ] **No email/SMS confirmation** — No booking receipt delivery
+- [ ] **No receipt delivery** — OTP works, but no booking confirmation receipt
 
 ---
 
@@ -123,5 +142,6 @@ Single source of truth tracking implementation progress, health, and remaining w
 5. **Integration tests** — Cover hold → cancel, hold → scan-in → scan-out
 6. **PWA manifest** — Add offline support so gate works during network drops
 7. **Payment** — Add Stripe/PromptPay for paid parking
+8. **Frontend unification** — Merge vanilla admin dashboard and React layout tool into one framework
 
 **Status:** READY FOR INTERNAL COMPANY USE ✅ (Production Hardening and configuration gaps resolved)

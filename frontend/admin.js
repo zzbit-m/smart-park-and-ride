@@ -63,6 +63,8 @@ function showDashboard() {
     const inp = document.getElementById('qr-input');
     if (inp) inp.focus();
   }, 80);
+
+  initLiveUpdates();
 }
 
 function showLoginOverlay(errorMsg = '') {
@@ -133,6 +135,7 @@ function performLogout() {
   document.getElementById('login-username').value = '';
   document.getElementById('login-password').value = '';
   document.getElementById('login-error').textContent = '';
+  closeLiveUpdates();
   showLoginOverlay();
 }
 
@@ -140,6 +143,7 @@ function performLogout() {
 function handle401() {
   clearToken();
   localStorage.removeItem('adminRole');
+  closeLiveUpdates();
   showLoginOverlay('⚠️ Session หมดอายุ — กรุณาเข้าสู่ระบบใหม่');
 }
 
@@ -1579,5 +1583,43 @@ function hideLayoutResult() {
   el.className = 'scan-result';
   el.innerHTML = '';
   clearTimeout(el._hideTimer);
+}
+
+/* ── Live Updates (SSE) ── */
+let _sseEventSource = null;
+
+function initLiveUpdates() {
+  if (_sseEventSource) return;
+
+  const sseUrl = `${API_BASE}/api/slots/live`;
+  console.log(`[SSE/Admin] Connecting to live updates at: ${sseUrl}`);
+
+  _sseEventSource = new EventSource(sseUrl);
+
+  _sseEventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      console.log('[SSE/Admin] Received slot update:', data);
+
+      const panel = document.getElementById('panel-dashboard');
+      if (panel && !panel.hidden) {
+        fetchStats();
+      }
+    } catch (err) {
+      console.error('[SSE/Admin] Failed to parse message:', err);
+    }
+  };
+
+  _sseEventSource.onerror = (err) => {
+    console.warn('[SSE/Admin] Connection error. EventSource will auto-reconnect.', err);
+  };
+}
+
+function closeLiveUpdates() {
+  if (_sseEventSource) {
+    console.log('[SSE/Admin] Closing connection');
+    _sseEventSource.close();
+    _sseEventSource = null;
+  }
 }
 

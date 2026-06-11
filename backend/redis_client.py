@@ -36,8 +36,12 @@ async def hold_slot(
     """
     redis = get_redis()
     key = get_slot_key(slot_id)
-    result = await redis.eval(HOLD_SCRIPT, 1, key, booking_id, str(ttl_seconds))
-    return result == 1
+    result = await redis.eval(HOLD_SCRIPT, 1, key, booking_id, str(ttl_seconds))  # type: ignore
+    if result == 1:
+        import json
+        await redis.publish("slot_updates", json.dumps({"slot_id": slot_id, "live_status": "held"}))
+        return True
+    return False
 
 
 async def set_qr_token_lookup(
@@ -68,6 +72,8 @@ async def delete_slot_hold(slot_id: int) -> None:
     """Remove the slot status key (clears hold / live Redis state for this slot)."""
     redis = get_redis()
     await redis.delete(get_slot_key(slot_id))
+    import json
+    await redis.publish("slot_updates", json.dumps({"slot_id": slot_id, "live_status": "available"}))
 
 
 async def get_slot_status(slot_id: int) -> str:
@@ -95,9 +101,13 @@ async def release_slot(slot_id: int) -> None:
     """Return a slot to available (e.g. cancel hold)."""
     redis = get_redis()
     await redis.set(get_slot_key(slot_id), "available")
+    import json
+    await redis.publish("slot_updates", json.dumps({"slot_id": slot_id, "live_status": "available"}))
 
 
 async def occupy_slot(slot_id: int, booking_id: str) -> None:
     """Mark a slot occupied in Redis (without TTL, representing parked state)."""
     redis = get_redis()
     await redis.set(get_slot_key(slot_id), f"occupied:{booking_id}")
+    import json
+    await redis.publish("slot_updates", json.dumps({"slot_id": slot_id, "live_status": "occupied"}))

@@ -84,7 +84,8 @@ async def auto_seed() -> None:
                         """),
                         {"name": zone_name, "tram_stop": tram_stop},
                     )).fetchone()
-                    zone_ids[zone_name] = row.id
+                    if row:
+                        zone_ids[zone_name] = row[0]
 
             # ── 3. Insert slots (idempotent via ON CONFLICT DO NOTHING) ──────────
             slots_created: list[tuple[int, str]] = []   # [(slot_id, slot_code)]
@@ -100,7 +101,7 @@ async def auto_seed() -> None:
                 )).fetchone()
 
                 if row:
-                    slots_created.append((row.id, slot_code))
+                    slots_created.append((row[0], slot_code))
 
             await db.commit()
 

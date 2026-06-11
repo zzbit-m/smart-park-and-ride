@@ -54,6 +54,8 @@ async def create_feedback(
     )
     await db.commit()
     row = result.mappings().first()
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to create feedback")
     return FeedbackOut(**row)
 
 
@@ -81,7 +83,7 @@ async def list_feedback(
     count_result = await db.execute(
         text(f"SELECT COUNT(*) FROM feedback {where_clause}"), params
     )
-    total = count_result.scalar()
+    total = count_result.scalar() or 0
 
     rows_result = await db.execute(
         text(
