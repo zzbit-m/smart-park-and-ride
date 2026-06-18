@@ -410,6 +410,7 @@ async function openPlateModal(slotId, slotCode) {
   const selectionInput = document.getElementById('plate-saved-vehicles');
 
   // Reset state
+  document.getElementById('plate-entry').value = '';
   lettersInp.value = '';
   numberInp.value = '';
   provinceInp.value = '';
@@ -446,12 +447,12 @@ async function openPlateModal(slotId, slotCode) {
     syncModalFieldsVisibility();
   }
 
-  // Focus the phone input or manual letters input
+  // Focus the phone input or manual entry input
   setTimeout(() => {
     if (document.getElementById('phone-input-wrap').style.display !== 'none') {
       phoneInp.focus();
     } else if (document.getElementById('manual-plate-wrap').style.display !== 'none') {
-      lettersInp.focus();
+      document.getElementById('plate-entry').focus();
     }
   }, 80);
 }
@@ -576,16 +577,26 @@ function initPlateModal() {
   const otpHint = document.getElementById('otp-input-hint');
   const confirm = document.getElementById('plate-confirm-btn');
 
-  // Monitor manual plate entry changes
-  lettersInp.addEventListener('input', () => {
-    lettersInp.value = lettersInp.value.replace(/[^0-9ก-ฮ]/g, '');
-    const match = lettersInp.value.match(/^([1-9]?)([ก-ฮ]*)/);
-    lettersInp.value = match ? match[0] : '';
-    validateModalInputs();
-  });
+  const entryInp = document.getElementById('plate-entry');
 
-  numberInp.addEventListener('input', () => {
-    numberInp.value = numberInp.value.replace(/[^0-9]/g, '');
+  // Monitor consolidated manual plate entry changes
+  entryInp.addEventListener('input', () => {
+    // Sanitize: allow only numbers, Thai characters, and spaces
+    let cleanVal = entryInp.value.replace(/[^0-9ก-ฮ\s]/g, '');
+    
+    // Auto-space logic: auto-insert space between characters and numbers (e.g. 1กข1234 -> 1กข 1234)
+    cleanVal = cleanVal.replace(/^([1-9]?[ก-ฮ]+)\s*(\d)/, '$1 $2');
+    entryInp.value = cleanVal;
+
+    // Parse into prefix letters and suffix number
+    const match = cleanVal.trim().match(/^([1-9]?[ก-ฮ]+)\s*(\d{1,4})?$/);
+    if (match) {
+      lettersInp.value = match[1] || '';
+      numberInp.value = match[2] || '';
+    } else {
+      lettersInp.value = '';
+      numberInp.value = '';
+    }
     validateModalInputs();
   });
 
@@ -683,7 +694,7 @@ function initPlateModal() {
   });
 
   // Enter key submits if confirm is enabled
-  [lettersInp, numberInp, otpInp, phoneInp].forEach(inp => {
+  [entryInp, otpInp, phoneInp].forEach(inp => {
     inp.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         if (inp === phoneInp && !requestOtpBtn.disabled) {

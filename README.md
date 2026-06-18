@@ -6,30 +6,54 @@ A parking reservation and check-in system for small managed park-and-ride facili
 
 ---
 
-## Quick Start
+## Quick Start (PowerShell Automation — Recommended)
+
+To launch the database, start the API backend, run migrations, and spin up a Cloudflare Tunnel automatically:
+```powershell
+.\start.ps1
+```
+*Note: The script automatically checks connection health, executes migrations inside the container, and copies the public tunnel URL to your clipboard!*
+
+To cleanly stop the tunnel and tear down the containers:
+```powershell
+.\stop.ps1
+```
+
+---
+
+## Alternative Manual Startup (Docker Compose)
 
 ### 1. Launch Services
 ```bash
-docker-compose up --build
+docker-compose up --build -d
 ```
-- **API:** `http://localhost:8000`
+*   **API / Rider Portal:** `http://localhost:8000`
+*   **Operator Dashboard:** `http://localhost:8000/admin.html`
+*   **Layout Manager (React SPA):** `http://localhost:8000/admin-layout/`
 
-### 2. Launch Frontend
+### 2. Run Database Migrations
 ```bash
-cd frontend
-python -m http.server 5500
+docker-compose exec backend alembic upgrade head
 ```
-- **Rider Portal:** `http://localhost:5500/index.html`
-- **Operator Dashboard:** `http://localhost:5500/admin.html`
-- **Feedback Form:** `http://localhost:5500/feedback.html`
-- **Feedback Admin:** `http://localhost:5500/feedback-admin.html`
-- **Layout Manager (React SPA):** See `frontend/admin-layout/README.md`
 
-### 3. Default Credentials
+---
+
+## Concurrency & Performance Testing
+
+To verify the atomic Redis booking locks under heavy simultaneous user load, execute the load test script:
+```bash
+python C:\Users\Admin\.gemini\antigravity-ide\scratch\concurrency_test.py
+```
+This spawns 50 concurrent threads to attempt to book the exact same slot at the same millisecond, validating that the backend locks out double-bookings correctly.
+
+---
+
+## Default Credentials
 | Role | Username | Password |
 |------|----------|----------|
-| Admin | `admin` | `admin123` |
+| Admin | `admin` | `strong_internal_password_2026` / `admin123` |
 | Operator | `operator` | `operator123` |
+
 
 ---
 

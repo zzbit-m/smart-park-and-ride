@@ -22,6 +22,7 @@ const API_LAYOUT_DIFF    = `${API_BASE}/api/admin/layout/diff`;
 const API_LAYOUT_UPLOAD  = `${API_BASE}/api/admin/layout/upload`;
 
 const TOKEN_KEY = 'adminToken';
+let _verifyTimeout = null;
 
 /* ══════════════════════════════════════════════════════
    AUTH — Login / Logout
@@ -458,14 +459,29 @@ window.addEventListener('DOMContentLoaded', () => {
     getEl('scan-result').classList.remove('scan-result--visible');
     getEl('clear-btn').style.opacity = '0';
     getEl('clear-btn').style.pointerEvents = 'none';
+    hideMetadataPanels();
     qrInput.focus();
   });
 
-  /* ── Show/hide clear button based on QR input ── */
+  /* ── Show/hide clear button based on QR input & perform automatic check ── */
   getEl('qr-input').addEventListener('input', () => {
-    const hasVal = !!getEl('qr-input').value;
+    const token = getEl('qr-input').value.trim();
+    const hasVal = !!token;
     getEl('clear-btn').style.opacity = hasVal ? '1' : '0';
     getEl('clear-btn').style.pointerEvents = hasVal ? 'auto' : 'none';
+
+    clearTimeout(_verifyTimeout);
+    if (hasVal) {
+      if (token.length >= 32) {
+        verifyScannedToken(token, false);
+      } else {
+        _verifyTimeout = setTimeout(() => {
+          verifyScannedToken(token, false);
+        }, 400);
+      }
+    } else {
+      hideMetadataPanels();
+    }
   });
 
   /* ── Clear scan log ── */
@@ -669,8 +685,8 @@ function onQrDecodeSuccess(decodedText) {
     setTimeout(() => cameraCard.classList.remove('camera-card--flash'), 700);
   }
 
-  const hint = getEl('camera-hint');
-  if (hint) hint.textContent = '✅ QR พบแล้ว — เลือก Scan In หรือ Scan Out';
+  // Verify token and adjust buttons accordingly
+  verifyScannedToken(token, true);
 }
 
 /* ── Handle Scan-In or Scan-Out from the decoded panel ── */
@@ -686,7 +702,7 @@ async function handleCameraAction(mode) {
   if (outBtn) outBtn.disabled = true;
 
   const apiUrl = mode === 'in' ? API_SCAN_IN : API_SCAN_OUT;
-  const defaultLbl = mode === 'in' ? 'เปิดไม้กั้น (Scan In)' : 'สแกนรถออก (Scan Out)';
+  const defaultLbl = mode === 'in' ? 'Scan In (เข้าจอด)' : 'Scan Out (ออกจากลาน)';
   const manualBtn = getEl(mode === 'in' ? 'scan-btn' : 'scan-out-btn');
 
   await doScan(apiUrl, token, manualBtn, defaultLbl, mode);
@@ -1209,25 +1225,15 @@ function updateLegend(data) {
 }
 
 /* ══════════════════════════════════════════════════════
-   LAYOUT MODULE — View current layout, preview diff, upload
+   LAYOUT MODULE
    GET  /api/admin/layout/current
-   POST /api/admin/layout/diff
-   POST /api/admin/layout/upload
 ══════════════════════════════════════════════════════ */
-
-let _layoutZoneCount = 0;
 
 function initLayoutTab() {
   const refreshBtn = getEl('layout-refresh-btn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', fetchCurrentLayout);
   }
-
-  getEl('layout-add-zone-btn').addEventListener('click', addLayoutZone);
-  getEl('layout-preview-btn').addEventListener('click', previewLayout);
-  getEl('layout-apply-btn').addEventListener('click', applyLayout);
-
-  addLayoutZone(); // start with one empty zone row
 }
 
 /* ── Fetch current layout ── */
@@ -1269,7 +1275,6 @@ function renderCurrentLayout(data) {
   if (!layout) {
     if (subEl) subEl.textContent = 'No layout found';
     bodyEl.innerHTML = '<p style="color:#6b7a99;font-size:13px;padding:12px 0;">No layout applied yet.</p>';
-    getEl('layout-version').value = 1;
     return;
   }
 
@@ -1299,194 +1304,8 @@ function renderCurrentLayout(data) {
   `;
 
   if (subEl) subEl.textContent = `v${layout.version} — ${layout.label || 'Unnamed'}`;
-
-  // Pre-fill form from current layout
-  getEl('layout-version').value = (layout.version || 0) + 1;
-  getEl('layout-label').value = `v${(layout.version || 0) + 1}`;
-
-  // Clear existing zone rows and populate from current config
-  const container = getEl('layout-zones-container');
-  container.innerHTML = '';
-  _layoutZoneCount = 0;
-  if (zones.length) {
-    zones.forEach(z => addLayoutZone(z));
-  } else {
-    addLayoutZone();
-  }
 }
 
-/* ── Zone form row management ── */
-
-function addLayoutZone(prefill) {
-  _layoutZoneCount++;
-  const id = _layoutZoneCount;
-  const container = getEl('layout-zones-container');
-  const row = document.createElement('div');
-  row.id = `zone-row-${id}`;
-  row.style.cssText = 'display:flex;gap:8px;align-items:end;padding:8px 0;border-bottom:1px solid #1e293b;flex-wrap:wrap;';
-
-  const name = prefill ? prefill.zone_name || '' : '';
-  const rows = prefill ? prefill.rows || 1 : 1;
-  const cols = prefill ? prefill.cols || 5 : 5;
-  const prefix = prefill ? prefill.slot_prefix || '' : '';
-  const type = prefill ? prefill.slot_type || 'standard' : 'standard';
-
-  row.innerHTML = `
-    <div style="flex:2;min-width:100px;">
-      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">ZONE NAME</label>
-      <input id="zone-name-${id}" class="scan-input" style="width:100%;" placeholder="Zone A" value="${name}" />
-    </div>
-    <div style="flex:1;min-width:60px;">
-      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">ROWS</label>
-      <input id="zone-rows-${id}" type="number" min="1" class="scan-input" style="width:100%;" value="${rows}" />
-    </div>
-    <div style="flex:1;min-width:60px;">
-      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">COLS</label>
-      <input id="zone-cols-${id}" type="number" min="1" class="scan-input" style="width:100%;" value="${cols}" />
-    </div>
-    <div style="flex:1;min-width:60px;">
-      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">PREFIX</label>
-      <input id="zone-prefix-${id}" class="scan-input" style="width:100%;" placeholder="A" maxlength="5" value="${prefix}" />
-    </div>
-    <div style="flex:1;min-width:80px;">
-      <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">TYPE</label>
-      <select id="zone-type-${id}" class="scan-input" style="width:100%;cursor:pointer;">
-        <option value="standard" ${type === 'standard' ? 'selected' : ''}>Standard</option>
-        <option value="disabled" ${type === 'disabled' ? 'selected' : ''}>Disabled</option>
-        <option value="EV" ${type === 'EV' ? 'selected' : ''}>EV</option>
-        <option value="motorcycle" ${type === 'motorcycle' ? 'selected' : ''}>Motorcycle</option>
-      </select>
-    </div>
-    <button id="zone-remove-${id}" class="btn-manual-release" style="flex:0 0 auto;padding:6px 10px;" title="Remove zone">
-      <span class="btn-manual-icon">✕</span>
-    </button>
-  `;
-  container.appendChild(row);
-
-  getEl(`zone-remove-${id}`).addEventListener('click', () => {
-    row.remove();
-    updateTotalSlots();
-  });
-
-  // Recalculate total when rows/cols change
-  getEl(`zone-rows-${id}`).addEventListener('input', updateTotalSlots);
-  getEl(`zone-cols-${id}`).addEventListener('input', updateTotalSlots);
-
-  updateTotalSlots();
-}
-
-function updateTotalSlots() {
-  const zones = collectLayoutZones();
-  const total = zones.reduce((sum, z) => sum + (z.rows || 1) * (z.cols || 1), 0);
-  const countEl = getEl('layout-total-count');
-  if (countEl) countEl.textContent = total;
-}
-
-/* ── Collect zone data from form ── */
-function collectLayoutZones() {
-  const zones = [];
-  const container = getEl('layout-zones-container');
-  const rows = container.querySelectorAll('[id^="zone-row-"]');
-  rows.forEach(row => {
-    const id = row.id.replace('zone-row-', '');
-    const nameEl = getEl(`zone-name-${id}`);
-    const rowsEl = getEl(`zone-rows-${id}`);
-    const colsEl = getEl(`zone-cols-${id}`);
-    const prefixEl = getEl(`zone-prefix-${id}`);
-    const typeEl = getEl(`zone-type-${id}`);
-    if (!nameEl || !rowsEl || !colsEl || !prefixEl || !typeEl) return;
-    const name = nameEl.value.trim();
-    if (!name) return;
-    zones.push({
-      zone_name: name,
-      rows: parseInt(rowsEl.value, 10) || 1,
-      cols: parseInt(colsEl.value, 10) || 1,
-      slot_prefix: prefixEl.value.trim().toUpperCase() || name.replace(/[^A-Z]/gi, '').slice(0, 1).toUpperCase(),
-      slot_type: typeEl.value,
-    });
-  });
-  return zones;
-}
-
-/* ── Preview layout diff ── */
-async function previewLayout() {
-  hideLayoutResult();
-  const zones = collectLayoutZones();
-  if (!zones.length) {
-    showLayoutResult('error', '⚠️ Please add at least one zone.');
-    return;
-  }
-
-  const version = parseInt(getEl('layout-version').value, 10) || 1;
-  const label = getEl('layout-label').value.trim() || `Layout v${version}`;
-  const config = { version, label, zones };
-
-  const previewBtn = getEl('layout-preview-btn');
-  previewBtn.disabled = true;
-  previewBtn.querySelector('.btn-scan-text').textContent = 'Previewing...';
-
-  try {
-    const res = await fetch(API_LAYOUT_DIFF, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(config),
-    });
-
-    if (res.status === 401) { handle401(); return; }
-
-    const data = await res.json();
-    renderLayoutResult('diff', data);
-  } catch (err) {
-    console.error('[Layout] preview error:', err);
-    showLayoutResult('error', '🔌 Network error — could not reach server.');
-  } finally {
-    previewBtn.disabled = false;
-    previewBtn.querySelector('.btn-scan-text').textContent = 'Preview Diff';
-  }
-}
-
-/* ── Apply layout ── */
-async function applyLayout() {
-  hideLayoutResult();
-  const zones = collectLayoutZones();
-  if (!zones.length) {
-    showLayoutResult('error', '⚠️ Please add at least one zone.');
-    return;
-  }
-
-  const version = parseInt(getEl('layout-version').value, 10) || 1;
-  const label = getEl('layout-label').value.trim() || `Layout v${version}`;
-  const config = { version, label, zones };
-
-  const applyBtn = getEl('layout-apply-btn');
-  applyBtn.disabled = true;
-  applyBtn.querySelector('.btn-scan-text').textContent = 'Applying...';
-
-  try {
-    const res = await fetch(API_LAYOUT_UPLOAD, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(config),
-    });
-
-    if (res.status === 401) { handle401(); return; }
-
-    const data = await res.json();
-    renderLayoutResult(res.ok ? 'success' : 'error', data);
-    if (res.ok) {
-      // Refresh current layout info
-      setTimeout(fetchCurrentLayout, 500);
-    }
-  } catch (err) {
-    console.error('[Layout] apply error:', err);
-    showLayoutResult('error', '🔌 Network error — could not reach server.');
-  } finally {
-    applyBtn.disabled = false;
-    applyBtn.querySelector('.btn-scan-text').textContent = 'Apply Layout';
-  }
-}
-
-/* ── Render diff/result in the result box ── */
 function renderLayoutResult(type, data) {
   const el = getEl('layout-result');
   el.className = 'scan-result scan-result--visible';
@@ -1620,6 +1439,112 @@ function closeLiveUpdates() {
     console.log('[SSE/Admin] Closing connection');
     _sseEventSource.close();
     _sseEventSource = null;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════
+   VERIFY SCANNED TOKEN FLOW
+   Toggles buttons and displays booking slot + plate details.
+   - User Scan-In is enabled only if state == 'held'
+   - User Scan-Out is enabled only if state == 'confirmed'
+══════════════════════════════════════════════════════ */
+
+async function verifyScannedToken(token, isCamera = false) {
+  token = token.trim();
+  if (!token || token.length < 10) {
+    hideMetadataPanels();
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/slots/verify/${token}`, {
+      method: 'GET',
+      headers: authHeaders()
+    });
+
+    if (res.status === 401) { handle401(); return; }
+
+    if (res.ok) {
+      const data = await res.json();
+      renderMetadata(data, isCamera);
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      renderInvalidToken(errData.detail || "ไม่พบการจอง หรือ QR Code หมดอายุ", isCamera);
+    }
+  } catch (err) {
+    console.error("Token verification failed:", err);
+    renderInvalidToken("🔌 เกิดข้อผิดพลาดทางเครือข่าย", isCamera);
+  }
+}
+
+function hideMetadataPanels() {
+  getEl('manual-decoded-meta').style.display = 'none';
+  getEl('scan-btn').style.display = 'inline-flex';
+  getEl('scan-out-btn').style.display = 'inline-flex';
+
+  const camMeta = getEl('camera-decoded-meta');
+  if (camMeta) camMeta.style.display = 'none';
+  const inBtn = getEl('cam-scan-in-btn');
+  const outBtn = getEl('cam-scan-out-btn');
+  if (inBtn) inBtn.style.display = 'inline-flex';
+  if (outBtn) outBtn.style.display = 'inline-flex';
+}
+
+function renderMetadata(data, isCamera) {
+  if (isCamera) {
+    getEl('camera-decoded-icon').textContent = '✅';
+    getEl('cam-meta-slot').textContent = data.slot_code;
+    getEl('cam-meta-plate').textContent = data.license_plate;
+    getEl('camera-decoded-meta').style.display = 'block';
+
+    if (data.status === 'held') {
+      getEl('cam-scan-in-btn').style.display = 'inline-flex';
+      getEl('cam-scan-out-btn').style.display = 'none';
+      getEl('camera-hint').innerHTML = '🟢 พร้อมตรวจรับรถเข้าจอด <strong>(Scan In เท่านั้น)</strong>';
+    } else if (data.status === 'confirmed') {
+      getEl('cam-scan-in-btn').style.display = 'none';
+      getEl('cam-scan-out-btn').style.display = 'inline-flex';
+      getEl('camera-hint').innerHTML = '🟠 พร้อมคืนช่องจอดขาออก <strong>(Scan Out เท่านั้น)</strong>';
+    }
+  } else {
+    getEl('manual-meta-slot').textContent = data.slot_code;
+    getEl('manual-meta-plate').textContent = data.license_plate;
+    const hintEl = getEl('manual-meta-action-hint');
+
+    if (data.status === 'held') {
+      getEl('scan-btn').style.display = 'inline-flex';
+      getEl('scan-out-btn').style.display = 'none';
+      hintEl.innerHTML = '🟢 พร้อมนำรถเข้าจอด (Ready for Check-In)';
+      hintEl.style.color = '#00e5a0';
+    } else if (data.status === 'confirmed') {
+      getEl('scan-btn').style.display = 'none';
+      getEl('scan-out-btn').style.display = 'inline-flex';
+      hintEl.innerHTML = '🟠 พร้อมนำรถออกจากลาน (Ready for Check-Out)';
+      hintEl.style.color = '#f5c542';
+    }
+    getEl('manual-decoded-meta').style.display = 'block';
+  }
+}
+
+function renderInvalidToken(message, isCamera) {
+  if (isCamera) {
+    getEl('camera-decoded-icon').textContent = '❌';
+    getEl('cam-meta-slot').textContent = 'ไม่พบข้อมูล';
+    getEl('cam-meta-plate').textContent = 'ไม่พบข้อมูล';
+    getEl('camera-decoded-meta').style.display = 'block';
+    getEl('cam-scan-in-btn').style.display = 'none';
+    getEl('cam-scan-out-btn').style.display = 'none';
+    getEl('camera-hint').textContent = `❌ ${message}`;
+  } else {
+    getEl('manual-meta-slot').textContent = '—';
+    getEl('manual-meta-plate').textContent = '—';
+    const hintEl = getEl('manual-meta-action-hint');
+    hintEl.innerHTML = `❌ ${message}`;
+    hintEl.style.color = '#ff4d6d';
+    getEl('scan-btn').style.display = 'none';
+    getEl('scan-out-btn').style.display = 'none';
+    getEl('manual-decoded-meta').style.display = 'block';
   }
 }
 

@@ -145,21 +145,28 @@
         <!-- Decoded token preview (shown after a successful scan) -->
         <div class="camera-decoded" id="camera-decoded" hidden>
           <div class="camera-decoded-inner">
-            <span class="camera-decoded-icon">✅</span>
+            <span class="camera-decoded-icon" id="camera-decoded-icon">✅</span>
             <div class="camera-decoded-body">
               <span class="camera-decoded-label">QR DECODED</span>
               <span class="camera-decoded-token" id="camera-decoded-token">—</span>
             </div>
           </div>
+          
+          <!-- Metainfo preview -->
+          <div class="camera-decoded-meta" id="camera-decoded-meta" style="margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px; font-size: 13px; color: #8b9ab5; text-align: left;">
+            <div><strong>ช่องจอด:</strong> <span id="cam-meta-slot" style="color: #00e5a0; font-weight: 600;">—</span></div>
+            <div><strong>ทะเบียนรถ:</strong> <span id="cam-meta-plate" style="color: #e8edf5; font-weight: 600;">—</span></div>
+          </div>
+
           <!-- Immediate action row once decoded -->
           <div class="camera-action-row">
             <button id="cam-scan-in-btn" class="btn-scan btn-scan-in btn-cam-action">
               <span class="btn-scan-icon">🚧</span>
-              <span class="btn-scan-text">Scan In</span>
+              <span class="btn-scan-text">Scan In (เข้าจอด)</span>
             </button>
             <button id="cam-scan-out-btn" class="btn-scan btn-scan-out btn-cam-action">
               <span class="btn-scan-icon">🚗</span>
-              <span class="btn-scan-text">Scan Out</span>
+              <span class="btn-scan-text">Scan Out (ออกจากลาน)</span>
             </button>
             <button id="cam-rescan-btn" class="btn-cam-rescan" title="Scan again">
               🔄 Rescan
@@ -199,6 +206,13 @@
               />
               <button class="input-clear-btn" id="clear-btn" title="Clear" aria-label="Clear input">✕</button>
             </div>
+          </div>
+
+          <!-- Metainfo preview manual -->
+          <div class="manual-decoded-meta" id="manual-decoded-meta" style="margin: 12px 0; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); font-size: 13px; text-align: left; display: none;">
+            <div><strong>ช่องจอด:</strong> <span id="manual-meta-slot" style="color: #00e5a0; font-weight: 600;">—</span></div>
+            <div><strong>ทะเบียนรถ:</strong> <span id="manual-meta-plate" style="color: #e8edf5; font-weight: 600;">—</span></div>
+            <div style="margin-top: 4px; font-size: 11px; color: #8b9ab5;" id="manual-meta-action-hint"></div>
           </div>
 
           <!-- Dual action button row -->
@@ -460,51 +474,22 @@
           </div>
         </div>
 
-        <!-- New Layout Form -->
-        <div class="admin-card">
-          <div class="dash-chart-header">
-            <div>
-              <p class="dash-chart-title">Upload New Layout</p>
-              <p class="dash-chart-sub">Define zones and slot layout below</p>
+        <!-- New Layout Card pointing to React SPA Grid Editor -->
+        <div class="admin-card" style="text-align: center; padding: 30px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+          <div class="scanner-icon-wrap" style="margin-bottom: 15px; float: none; display: inline-block;">
+            <div class="scanner-icon" style="background: rgba(0, 229, 160, 0.1); width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+              <span style="font-size: 36px;">🅿️</span>
             </div>
           </div>
-
-          <div style="padding:8px 0;display:flex;gap:12px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:120px;">
-              <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">VERSION</label>
-              <input id="layout-version" type="number" min="1" step="1" class="scan-input" style="width:100%;" value="1" />
-            </div>
-            <div style="flex:3;min-width:200px;">
-              <label style="color:#8b9ab5;font-size:11px;display:block;margin-bottom:4px;">LABEL</label>
-              <input id="layout-label" type="text" class="scan-input" style="width:100%;" placeholder="e.g. Main Lot v3" />
-            </div>
-          </div>
-
-          <div id="layout-zones-container">
-            <!-- zone rows inserted here -->
-          </div>
-
-          <button id="layout-add-zone-btn" class="btn-manual-release" style="margin-top:8px;">
-            <span class="btn-manual-icon">➕</span>
-            <span class="btn-manual-text">Add Zone</span>
-          </button>
-
-          <div id="layout-total-slots" style="color:#6b7a99;font-size:12px;padding:8px 0;text-align:right;">
-            Total: <span id="layout-total-count" style="color:#00e5a0;font-weight:600;">0</span> slots
-          </div>
-
-          <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
-            <button id="layout-preview-btn" class="btn-scan btn-scan-in" style="flex:1;">
-              <span class="btn-scan-icon">🔍</span>
-              <span class="btn-scan-text">Preview Diff</span>
-            </button>
-            <button id="layout-apply-btn" class="btn-scan btn-scan-out" style="flex:1;">
-              <span class="btn-scan-icon">💾</span>
-              <span class="btn-scan-text">Apply Layout</span>
-            </button>
-          </div>
-
-          <div id="layout-result" class="scan-result" role="alert" aria-live="polite"></div>
+          <h2 class="scanner-card-title" style="margin-top: 10px;">Layout Grid Editor (React SPA)</h2>
+          <p class="scanner-card-sub" style="margin-bottom: 20px; font-size: 13px; line-height: 1.5; color: #8b9ab5;">
+            ระบบจัดการผังช่องจอดรถแบบโต้ตอบ (Interactive Grid Editor)<br>
+            ช่วยให้การจัดรูปแบบผังแถว กำหนดโซน และประเภทรถทำได้ง่ายผ่านโปรแกรมแก้ไขแบบรูปภาพ
+          </p>
+          <a href="/admin-layout/" class="btn-manual-release" style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none; width: 100%; max-width: 250px; padding: 12px 20px; border-radius: 8px;">
+            <span class="btn-manual-icon">🎨</span>
+            <span class="btn-manual-text">เปิดโปรแกรมแก้ไขผัง →</span>
+          </a>
         </div>
 
       </div><!-- /panel-layout -->

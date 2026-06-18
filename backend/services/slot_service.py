@@ -668,3 +668,39 @@ async def release_hold(db: AsyncSession, slot_id: int, qr_token: str, user_id: s
         raise
 
     return {"message": f"Slot {slot_id} released successfully"}
+
+
+async def verify_token(db: AsyncSession, qr_token: str) -> dict:
+    """Verify a QR token and return its details and current status (held / confirmed)."""
+    qr_token = qr_token.strip()
+    if not qr_token:
+        raise HTTPException(status_code=400, detail="QR token is required")
+
+    result = await db.execute(
+        text("""
+            SELECT b.id, b.status, b.license_plate, ps.slot_code, ps.id AS slot_id
+            FROM bookings b
+            JOIN parking_slots ps ON ps.id = b.slot_id
+            WHERE b.qr_token = :qr_token
+            LIMIT 1
+        """),
+        {"qr_token": qr_token},
+    )
+    row = result.fetchone()
+    if not row:
+        logger.warning(f"Verification failed: QR token '{qr_token}' not found or expired")
+        raise HTTPException(status_code=404, detail="QR token not found or expired")
+
+    # If the booking is not active (i.e. completed or expired), return error
+    if row.status not in ("held", "confirmed"):
+        logger.warning(f"Verification failed: Booking status '{row.status}' is not active for token '{qr_token}'")
+        raise HTTPException(status_code=400, detail=f"Booking is inactive (status: {row.status})")
+
+    return {
+        "booking_id": str(row.id),
+        "status": row.status,
+        "license_plate": row.license_plate,
+        "slot_code": row.slot_code,
+        "slot_id": row.slot_id,
+    }
+

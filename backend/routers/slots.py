@@ -133,6 +133,18 @@ async def seed_slots(
     return await slot_service.seed_slots(db, actor=actor)
 
 
+@router.get("/verify/{qr_token}")
+async def verify_token(
+    qr_token: str,
+    auth_payload: dict = Depends(verify_operator_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verify a QR token status (held, confirmed, completed, etc.) before gate entry or exit.
+    """
+    return await slot_service.verify_token(db, qr_token)
+
+
 @router.get("/", response_model=list[SlotOut])
 async def list_slots(db: AsyncSession = Depends(get_db)):
     """List all parking slots with live status merged from PostgreSQL and Redis."""

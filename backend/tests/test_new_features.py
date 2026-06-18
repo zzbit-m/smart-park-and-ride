@@ -217,3 +217,61 @@ async def test_live_slots_sse_generator(mock_get_redis):
             assert val == 'data: {"slot_id": 1, "live_status": "held"}\n\n'
         finally:
             await gen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_verify_token_success():
+    mock_db = AsyncMock()
+    mock_row = MagicMock()
+    mock_row.id = "booking-uuid"
+    mock_row.status = "held"
+    mock_row.license_plate = "1กข 1234"
+    mock_row.slot_code = "A01"
+    mock_row.slot_id = 10
+
+    mock_result = MagicMock()
+    mock_result.fetchone.return_value = mock_row
+    mock_db.execute.return_value = mock_result
+
+    res = await slot_service.verify_token(mock_db, "valid-token-123")
+    assert res["booking_id"] == "booking-uuid"
+    assert res["status"] == "held"
+    assert res["license_plate"] == "1กข 1234"
+    assert res["slot_code"] == "A01"
+    assert res["slot_id"] == 10
+
+
+@pytest.mark.asyncio
+async def test_verify_token_not_found():
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.fetchone.return_value = None
+    mock_db.execute.return_value = mock_result
+
+    with pytest.raises(HTTPException) as exc_info:
+        await slot_service.verify_token(mock_db, "nonexistent-token")
+
+    assert exc_info.value.status_code == 404
+    assert "not found or expired" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_verify_token_inactive():
+    mock_db = AsyncMock()
+    mock_row = MagicMock()
+    mock_row.id = "booking-uuid"
+    mock_row.status = "completed"  # not held or confirmed
+    mock_row.license_plate = "1กข 1234"
+    mock_row.slot_code = "A01"
+    mock_row.slot_id = 10
+
+    mock_result = MagicMock()
+    mock_result.fetchone.return_value = mock_row
+    mock_db.execute.return_value = mock_result
+
+    with pytest.raises(HTTPException) as exc_info:
+        await slot_service.verify_token(mock_db, "completed-token")
+
+    assert exc_info.value.status_code == 400
+    assert "Booking is inactive" in exc_info.value.detail
+

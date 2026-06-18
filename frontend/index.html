@@ -213,26 +213,18 @@
         <div id="manual-plate-wrap">
           <label class="plate-input-label">ทะเบียนรถ (License Plate)</label>
 
-          <!-- Row 1: Letters and Number side-by-side -->
+          <!-- Single consolidated text entry -->
           <div class="plate-row-1" style="display: flex; gap: 12px; margin-bottom: 12px;">
             <input
-              id="plate-letters"
+              id="plate-entry"
               type="text"
               class="plate-input"
-              placeholder="อักษร (เช่น กข)"
-              maxlength="3"
+              placeholder="เช่น 1กข 1234 หรือ กข 1234"
               autocomplete="off"
               style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
             />
-            <input
-              id="plate-number"
-              type="text"
-              class="plate-input"
-              placeholder="เลข (เช่น 1234)"
-              maxlength="4"
-              autocomplete="off"
-              style="flex: 1; font-size: 16px; padding: 14px; text-align: center; letter-spacing: 1px;"
-            />
+            <input id="plate-letters" type="hidden" />
+            <input id="plate-number" type="hidden" />
           </div>
 
 
