@@ -26,6 +26,7 @@ except ImportError:  # pragma: no cover
 
 from database import check_postgres, check_redis, close_connections, init_connections
 from auto_seed import auto_seed
+from expiry_worker import run_expiry_worker
 from routers import admin, slots, auth, users, feedback, push
 from config import settings
 
@@ -58,9 +59,15 @@ elif settings.SENTRY_DSN:
 async def lifespan(app: FastAPI):
     await init_connections()
     await auto_seed()   # no-op when parking_slots already has rows
+    expiry_task = asyncio.create_task(run_expiry_worker())
     try:
         yield
     finally:
+        expiry_task.cancel()
+        try:
+            await expiry_task
+        except asyncio.CancelledError:
+            pass
         await close_connections()
 
 

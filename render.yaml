@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: smart-park-and-ride
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app -w 2 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:$PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://smart-park-and-ride.onrender.com
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: OPERATOR_USERNAME
+        value: operator
+      - key: OPERATOR_PASSWORD
+        sync: false
+      - key: DEBUG_OTP
+        value: "True"
